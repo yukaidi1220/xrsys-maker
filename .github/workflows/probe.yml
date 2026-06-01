@@ -205,10 +205,21 @@ jobs:
           Write-Host "=== 测试 cmd.exe 调用 BAT 中文输出 ==="
           Write-Host ""
 
-          # 用 Start-Process 让 cmd.exe 直接输出到控制台
-          Start-Process -FilePath "cmd.exe" -ArgumentList "/c .\test.bat" -Wait -NoNewWindow
+          # 捕获 cmd.exe 输出（原始字节）
+          $psi = New-Object System.Diagnostics.ProcessStartInfo
+          $psi.FileName = "cmd.exe"
+          $psi.Arguments = "/c .\test.bat"
+          $psi.UseShellExecute = $false
+          $psi.RedirectStandardOutput = $true
+          $psi.StandardOutputEncoding = $gbk
 
-          Write-Host ""
+          $process = [System.Diagnostics.Process]::Start($psi)
+          $output = $process.StandardOutput.ReadToEnd()
+          $process.WaitForExit()
+
+          # 输出（已经是 UTF-8 字符串了）
+          Write-Host $output
+
           Write-Host "=== 测试完成 ==="
 
           Remove-Item ".\test.bat" -ErrorAction SilentlyContinue
