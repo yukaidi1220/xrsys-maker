@@ -81,27 +81,24 @@ jobs:
 
           Write-Host ""
           Write-Host "=== 虚拟内存（页面文件）信息 ==="
+
+          # 方法1: Win32_PageFile
+          Write-Host "--- 方法1: Win32_PageFile ---"
           $pageFiles = Get-CimInstance Win32_PageFile
           if ($pageFiles) {
             foreach ($pf in $pageFiles) {
-              $sizeGB = [math]::Round($pf.MaxSize/1024, 2)
-              $freeGB = [math]::Round($pf.FreeSpace/1024, 2)
               Write-Host "页面文件: $($pf.Name)"
               Write-Host "  所在盘符: $(Split-Path $pf.Name -Qualifier)"
-              Write-Host "  最大大小: $sizeGB GB"
-              Write-Host "  可用空间: $freeGB GB"
+              Write-Host "  当前大小: $([math]::Round($pf.FileSize/1MB, 2)) MB"
+              Write-Host "  最大大小: $([math]::Round($pf.MaxSize/1MB, 2)) MB"
             }
           } else {
-            Write-Host "未检测到页面文件（可能使用系统管理大小）"
+            Write-Host "Win32_PageFile 未返回数据"
           }
 
-          # 备用检测方式
+          # 方法2: Win32_PageFileSetting
           Write-Host ""
-          Write-Host "=== 虚拟内存详细信息（备用） ==="
-          $memConfig = Get-CimInstance Win32_ComputerSystem
-          $autoManage = $memConfig.AutomaticManagedPagefile
-          Write-Host "系统自动管理虚拟内存: $autoManage"
-
+          Write-Host "--- 方法2: Win32_PageFileSetting ---"
           $pageFileSetting = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
           if ($pageFileSetting) {
             foreach ($pf in $pageFileSetting) {
@@ -109,14 +106,51 @@ jobs:
               Write-Host "  初始大小: $($pf.InitialSize) MB"
               Write-Host "  最大大小: $($pf.MaximumSize) MB"
             }
+          } else {
+            Write-Host "Win32_PageFileSetting 未返回数据"
+          }
+
+          # 方法3: 检查页面文件是否存在
+          Write-Host ""
+          Write-Host "--- 方法3: 检查页面文件是否存在 ---"
+          $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Root -match '^[A-Z]:\\$' }
+          foreach ($drive in $drives) {
+            $pageFilePath = "$($drive.Root)pagefile.sys"
+            if (Test-Path $pageFilePath) {
+              $fileInfo = Get-Item $pageFilePath -Force -ErrorAction SilentlyContinue
+              if ($fileInfo) {
+                Write-Host "找到页面文件: $pageFilePath"
+                Write-Host "  文件大小: $([math]::Round($fileInfo.Length/1MB, 2)) MB"
+              }
+            }
+          }
+
+          # 方法4: 系统自动管理状态
+          Write-Host ""
+          Write-Host "--- 方法4: 系统配置 ---"
+          $memConfig = Get-CimInstance Win32_ComputerSystem
+          $autoManage = $memConfig.AutomaticManagedPagefile
+          Write-Host "系统自动管理虚拟内存: $autoManage"
+
+          # 方法5: 注册表页面文件配置
+          Write-Host ""
+          Write-Host "--- 方法5: 注册表页面文件配置 ---"
+          $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
+          $regValues = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+          if ($regValues) {
+            Write-Host "PagingFiles: $($regValues.PagingFiles)"
+            Write-Host "DisablePagingExecutive: $($regValues.DisablePagingExecutive)"
           }
 
           # 总虚拟内存
+          Write-Host ""
+          Write-Host "=== 虚拟内存汇总 ==="
           $totalVirtualGB = [math]::Round($os.TotalVirtualMemorySize/1MB, 2)
           $freeVirtualGB = [math]::Round($os.FreeVirtualMemory/1MB, 2)
-          Write-Host ""
+          $usedVirtualGB = [math]::Round($totalVirtualGB - $freeVirtualGB, 2)
           Write-Host "总虚拟内存: $totalVirtualGB GB"
           Write-Host "可用虚拟内存: $freeVirtualGB GB"
+          Write-Host "已用虚拟内存: $usedVirtualGB GB"
 
           Write-Host ""
           Write-Host "=== 内存条详细信息 ==="
