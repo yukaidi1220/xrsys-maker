@@ -84,6 +84,7 @@ jobs:
             )
 
             $lastOutputTime = [DateTime]::MinValue
+            $lastMonitorTime = [DateTime]::MinValue
             $logFile = ".\wimlib_temp.log"
 
             $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru -NoNewWindow -RedirectStandardOutput $logFile
@@ -113,6 +114,19 @@ jobs:
                 }
                 Clear-Content $logFile -ErrorAction SilentlyContinue
               }
+
+              # 每30秒输出 CPU 和内存占用
+              $now = [DateTime]::UtcNow
+              if (($now - $lastMonitorTime).TotalSeconds -ge 30) {
+                $lastMonitorTime = $now
+                $cpu = (Get-CimInstance Win32_Processor).LoadPercentage
+                $os = Get-CimInstance Win32_OperatingSystem
+                $totalMem = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
+                $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+                $usedMem = [math]::Round($totalMem - $freeMem, 2)
+                $memPercent = [math]::Round(($usedMem / $totalMem) * 100, 1)
+                Write-Host "[资源监控] CPU: ${cpu}% | 内存: ${usedMem}/${totalMem} GB (${memPercent}%)" -ForegroundColor DarkGray
+              }
             }
 
             # 输出剩余内容
@@ -125,23 +139,23 @@ jobs:
             return $process.ExitCode
           }
 
-          # 创建模拟脚本：快速输出大量日志
+          # 创建模拟脚本：快速输出大量日志（持续约40秒）
           $mockScript = @'
-          for ($i = 1; $i -le 10; $i++) {
-            Write-Output "Creating files [$i/10]..."
+          for ($i = 1; $i -le 20; $i++) {
+            Write-Output "Creating files [$i/20]..."
             Start-Sleep -Milliseconds 500
           }
           Write-Output "Processing normal log line 1"
-          for ($i = 1; $i -le 5; $i++) {
-            Write-Output "Extracting file data [$i/5]..."
+          for ($i = 1; $i -le 10; $i++) {
+            Write-Output "Extracting file data [$i/10]..."
             Start-Sleep -Milliseconds 500
           }
           Write-Output "Processing normal log line 2"
           Write-Output "Applying metadata to files..."
           Write-Output "MiB scanned 1024"
           Write-Output "Archiving file data..."
-          for ($i = 1; $i -le 10; $i++) {
-            Write-Output "Extracting file data [$i/10]..."
+          for ($i = 1; $i -le 20; $i++) {
+            Write-Output "Extracting file data [$i/20]..."
             Start-Sleep -Milliseconds 300
           }
           Write-Output "Done!"

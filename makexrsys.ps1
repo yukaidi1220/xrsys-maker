@@ -37,6 +37,7 @@ function Invoke-Wimlib {
     )
 
     $lastOutputTime = [DateTime]::MinValue
+    $lastMonitorTime = [DateTime]::MinValue
     $logFile = ".\wimlib_temp.log"
 
     $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru -NoNewWindow -RedirectStandardOutput $logFile
@@ -65,6 +66,19 @@ function Invoke-Wimlib {
                 }
             }
             Clear-Content $logFile -ErrorAction SilentlyContinue
+        }
+
+        # 每30秒输出 CPU 和内存占用
+        $now = [DateTime]::UtcNow
+        if (($now - $lastMonitorTime).TotalSeconds -ge 30) {
+            $lastMonitorTime = $now
+            $cpu = (Get-CimInstance Win32_Processor).LoadPercentage
+            $os = Get-CimInstance Win32_OperatingSystem
+            $totalMem = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
+            $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+            $usedMem = [math]::Round($totalMem - $freeMem, 2)
+            $memPercent = [math]::Round(($usedMem / $totalMem) * 100, 1)
+            Write-Host "[资源监控] CPU: ${cpu}% | 内存: ${usedMem}/${totalMem} GB (${memPercent}%)" -ForegroundColor DarkGray
         }
     }
 
