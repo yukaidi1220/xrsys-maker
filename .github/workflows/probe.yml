@@ -188,18 +188,19 @@ jobs:
         shell: pwsh
         run: |
           # 创建测试 BAT 文件（GBK 编码，CR+LF）
-          $batContent = @"
-@echo off
-echo === 测试中文输出 ===
-echo 这是第一行中文
-echo 正在处理文件...
-echo 完成！
-echo === 测试结束 ===
-"@
+          $lines = @(
+            '@echo off'
+            'echo === 测试中文输出 ==='
+            'echo 这是第一行中文'
+            'echo 正在处理文件...'
+            'echo 完成！'
+            'echo === 测试结束 ==='
+          )
+          $batContent = $lines -join "`r`n"
 
           # 明确使用 GBK 编码（代码页 936）
           $gbk = [System.Text.Encoding]::GetEncoding(936)
-          [System.IO.File]::WriteAllText(".\test.bat", $batContent.Replace("`n", "`r`n"), $gbk)
+          [System.IO.File]::WriteAllText(".\test.bat", $batContent, $gbk)
 
           Write-Host "=== 测试 cmd.exe 调用 BAT 中文输出 ==="
           Write-Host ""
