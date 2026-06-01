@@ -42,9 +42,47 @@ function Write-Status {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "[$time] $Step - $Status" -ForegroundColor Yellow
+    Write-Host "区域: $region" -ForegroundColor White
     Write-Host "内存: ${usedMem}/${totalMem} GB (${memPercent}%)" -ForegroundColor White
     Write-Host "C盘可用: ${cFree} GB | D盘可用: ${dFree} GB" -ForegroundColor White
     Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+# 获取网络信息函数
+function Write-NetworkInfo {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "网络信息" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Green
+
+    # 获取 GitHub Actions 区域
+    $region = $env:RUNNER_LOCATION
+    if ($region) {
+        Write-Host "Runner 区域: $region" -ForegroundColor White
+    } else {
+        Write-Host "Runner 区域: 未知（非 GitHub Actions 环境）" -ForegroundColor Gray
+    }
+
+    # 获取 IPv4
+    try {
+        $ipv4 = Invoke-WebRequest -Uri "https://4.itdog.cn" -TimeoutSec 5 -UseBasicParsing | Select-Object -ExpandProperty Content
+        $ipv4 = $ipv4.Trim()
+        Write-Host "IPv4: $ipv4" -ForegroundColor White
+    } catch {
+        Write-Host "IPv4: 获取失败" -ForegroundColor Red
+    }
+
+    # 获取 IPv6
+    try {
+        $ipv6 = Invoke-WebRequest -Uri "https://6.itdog.cn" -TimeoutSec 5 -UseBasicParsing | Select-Object -ExpandProperty Content
+        $ipv6 = $ipv6.Trim()
+        Write-Host "IPv6: $ipv6" -ForegroundColor White
+    } catch {
+        Write-Host "IPv6: 获取失败或不支持" -ForegroundColor Gray
+    }
+
+    Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
 }
 
@@ -382,9 +420,12 @@ $sysDate = $sysDateFull | Get-Date -Format "yyyy.MM.dd"
 $sysFile = "${sysver}_${sysdate}_${osversion}"
 
 # remove temporaty files
-Remove-Item -Path ".\temp\" -Recurse -ErrorAction SilentlyContinue 
-New-Item -Path ".\bin\" -ItemType "directory" -ErrorAction SilentlyContinue 
-New-Item -Path ".\temp\" -ItemType "directory" -ErrorAction SilentlyContinue 
+Remove-Item -Path ".\temp\" -Recurse -ErrorAction SilentlyContinue
+New-Item -Path ".\bin\" -ItemType "directory" -ErrorAction SilentlyContinue
+New-Item -Path ".\temp\" -ItemType "directory" -ErrorAction SilentlyContinue
+
+# 获取网络信息
+Write-NetworkInfo
 
 # Installing dependencies
 function Test-Hashes {
