@@ -719,7 +719,7 @@ $sysFileSHA256 = Get-FileHash ".\$sysFile.esd" -Algorithm SHA256 | Select-Object
 
 # Publish image
 Write-Status -Step "上传镜像到网盘" -Status "开始"
-.\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 60Mi
+.\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 240Mi
 if ($?) { Write-Host "Upload Successfully!" } else { Write-Error "Upload Failed!" }
 .\bin\rclone.exe copy "$sysFile.json" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress
 # Set latest
