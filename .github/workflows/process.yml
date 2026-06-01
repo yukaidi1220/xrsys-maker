@@ -1,0 +1,136 @@
+name: 系统进程探测
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe-process:
+    runs-on: windows-latest
+    steps:
+      - name: 获取初始内存状态
+        shell: pwsh
+        run: |
+          Write-Host "=== 初始内存状态 ==="
+          $os = Get-CimInstance Win32_OperatingSystem
+          $totalMem = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
+          $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+          $usedMem = [math]::Round($totalMem - $freeMem, 2)
+          $memPercent = [math]::Round(($usedMem / $totalMem) * 100, 1)
+          Write-Host "总内存: $totalMem GB"
+          Write-Host "已用: $usedMem GB ($memPercent%)"
+          Write-Host "可用: $freeMem GB"
+
+      - name: 获取进程列表（按内存占用排序）
+        shell: pwsh
+        run: |
+          Write-Host "=== 进程列表（前30，按内存占用排序）==="
+          Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 30 |
+            Format-Table Id, ProcessName, @{N='内存MB';E={[math]::Round($_.WorkingSet64/1MB, 2)}}, @{N='CPU秒';E={[math]::Round($_.CPU, 2)}} -AutoSize
+
+      - name: 获取已安装应用
+        shell: pwsh
+        run: |
+          Write-Host "=== 已安装应用（注册表）==="
+          $apps = @()
+          $paths = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          )
+          foreach ($path in $paths) {
+            $apps += Get-ItemProperty $path -ErrorAction SilentlyContinue |
+              Where-Object { $_.DisplayName -and $_.DisplayName -notmatch "^(Update|Security|KB\d)" } |
+              Select-Object DisplayName, DisplayVersion, Publisher
+          }
+          $apps | Sort-Object DisplayName | Format-Table -AutoSize
+
+      - name: 获取运行中的服务
+        shell: pwsh
+        run: |
+          Write-Host "=== 运行中的服务（前20，按内存占用排序）==="
+          Get-Process -Name svchost -ErrorAction SilentlyContinue |
+            Sort-Object WorkingSet64 -Descending | Select-Object -First 20 |
+            Format-Table Id, ProcessName, @{N='内存MB';E={[math]::Round($_.WorkingSet64/1MB, 2)}} -AutoSize
+
+      - name: 释放内存
+        shell: pwsh
+        run: |
+          Write-Host "=== 开始释放内存 ==="
+
+          # 1. 停止不必要的服务
+          $servicesToStop = @(
+            "WSearch",           # Windows Search
+            "SysMain",           # Superfetch
+            "DiagTrack",         # Connected User Experiences and Telemetry
+            "dmwappushservice",  # WAP Push Message Routing Service
+            "MapsBroker",        # Downloaded Maps Manager
+            "lfsvc",             # Geolocation Service
+            "RetailDemo",        # Retail Demo Service
+            "XblAuthManager",    # Xbox Live Auth Manager
+            "XblGameSave",       # Xbox Live Game Save
+            "XboxNetApiSvc"      # Xbox Live Networking Service
+          )
+
+          foreach ($svc in $servicesToStop) {
+            $service = Get-Service -Name $svc -ErrorAction SilentlyContinue
+            if ($service -and $service.Status -eq 'Running') {
+              Write-Host "停止服务: $svc"
+              Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          # 2. 关闭不必要的进程
+          $processesToStop = @(
+            "SearchUI",          # 搜索UI
+            "StartMenuExperienceHost",  # 开始菜单
+            "SecurityHealthService",    # 安全健康服务
+            "MsMpEng",           # Windows Defender
+            "NisSrv",            # Network Inspection Service
+            "SpeechRuntime",     # 语音运行时
+            "YourPhone",         # Your Phone
+            "PhoneExperienceHost"
+          )
+
+          foreach ($proc in $processesToStop) {
+            $process = Get-Process -Name $proc -ErrorAction SilentlyContinue
+            if ($process) {
+              Write-Host "关闭进程: $proc (PID: $($process.Id))"
+              Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          # 3. 清理回收站
+          Write-Host "清理回收站..."
+          Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+
+          # 4. 清理临时文件
+          Write-Host "清理临时文件..."
+          Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+
+          # 5. 强制垃圾回收
+          Write-Host "执行垃圾回收..."
+          [System.GC]::Collect()
+          [System.GC]::WaitForPendingFinalizers()
+
+          Write-Host "=== 内存释放完成 ==="
+
+      - name: 获取释放后内存状态
+        shell: pwsh
+        run: |
+          Write-Host "=== 释放后内存状态 ==="
+          $os = Get-CimInstance Win32_OperatingSystem
+          $totalMem = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
+          $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+          $usedMem = [math]::Round($totalMem - $freeMem, 2)
+          $memPercent = [math]::Round(($usedMem / $totalMem) * 100, 1)
+          Write-Host "总内存: $totalMem GB"
+          Write-Host "已用: $usedMem GB ($memPercent%)"
+          Write-Host "可用: $freeMem GB"
+
+      - name: 释放后进程列表
+        shell: pwsh
+        run: |
+          Write-Host "=== 释放后进程列表（前20，按内存占用排序）==="
+          Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 20 |
+            Format-Table Id, ProcessName, @{N='内存MB';E={[math]::Round($_.WorkingSet64/1MB, 2)}}, @{N='CPU秒';E={[math]::Round($_.CPU, 2)}} -AutoSize
