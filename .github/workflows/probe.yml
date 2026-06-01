@@ -43,6 +43,16 @@ jobs:
             Write-Host "IPv6: 获取失败或不支持"
           }
 
+          # 获取 IP 归属地
+          try {
+            $geo = Invoke-RestMethod -Uri "https://myip.ipip.net/json" -TimeoutSec 5
+            if ($geo.ret -eq "ok") {
+              Write-Host "归属地: $($geo.data.location -join ' ')"
+            }
+          } catch {
+            Write-Host "归属地: 获取失败"
+          }
+
       - name: 查看分区信息
         shell: pwsh
         run: |

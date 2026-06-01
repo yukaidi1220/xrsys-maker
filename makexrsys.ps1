@@ -82,6 +82,16 @@ function Write-NetworkInfo {
         Write-Host "IPv6: 获取失败或不支持" -ForegroundColor Gray
     }
 
+    # 获取 IP 归属地
+    try {
+        $geo = Invoke-RestMethod -Uri "https://myip.ipip.net/json" -TimeoutSec 5
+        if ($geo.ret -eq "ok") {
+            Write-Host "归属地: $($geo.data.location -join ' ')" -ForegroundColor White
+        }
+    } catch {
+        Write-Host "归属地: 获取失败" -ForegroundColor Gray
+    }
+
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
 }
