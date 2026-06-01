@@ -666,10 +666,13 @@ if ($sysArch -eq "arm64") {
 }
 Copy-Item -Path ".\unattend.xml" -Destination "$mountDir" -Force
 # & "$mountDir\injectdeploy.bat" /S
-$originalEncoding = [Console]::OutputEncoding
-[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding('GBK')
-cmd.exe /c "$mountDir\injectdeploy.bat" /S
-[Console]::OutputEncoding = $originalEncoding
+# GBK 转 UTF-8 后执行
+$gbk = [System.Text.Encoding]::GetEncoding(936)
+$gbkContent = [System.IO.File]::ReadAllText("$mountDir\injectdeploy.bat", $gbk)
+$utf8bom = New-Object System.Text.UTF8Encoding $true
+[System.IO.File]::WriteAllText("$mountDir\injectdeploy_utf8.bat", $gbkContent, $utf8bom)
+cmd.exe /c "$mountDir\injectdeploy_utf8.bat" /S
+Remove-Item -Path "$mountDir\injectdeploy_utf8.bat" -ErrorAction SilentlyContinue
 if ($?) { Write-Host "Inject Deploy Successfully!" } else { Write-Error "Inject Deploy Failed!" }
 Remove-Item -Path "$mountDir\injectdeploy.bat" -ErrorAction SilentlyContinue
 Write-Status -Step "注入部署文件" -Status "完成"
