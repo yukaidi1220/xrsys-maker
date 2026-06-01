@@ -50,9 +50,10 @@ jobs:
 
           Write-Host ""
           Write-Host "=== CPU 缓存详细信息 ==="
-          Get-CimInstance Win32_CacheMemory | ForEach-Object {
-            $level = switch($_.Level) { 2 {"L2"} 3 {"L3"} default {"L$($_.Level)"} }
-            Write-Host "$level: $([math]::Round($_.MaxCacheSize/1024,2)) MB ($($_.NumberOfBlocks) blocks)"
+          Get-CimInstance Win32_CacheMemory -ErrorAction SilentlyContinue | ForEach-Object {
+            $cacheLevel = switch($_.Level) { 2 {"L2"} 3 {"L3"} default {"L$($_.Level)"} }
+            $cacheSizeMB = [math]::Round($_.MaxCacheSize/1024,2)
+            Write-Host "${cacheLevel}: ${cacheSizeMB} MB ($($_.NumberOfBlocks) blocks)"
           }
 
       - name: 查看内存详细信息
