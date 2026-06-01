@@ -88,11 +88,26 @@ jobs:
             Write-Host "内存时序信息需要专用工具（如 CPU-Z）获取"
           }
 
-      - name: 安装并运行速度测试
+      - name: 安装 speedtest
         shell: pwsh
         run: |
           Write-Host "=== 安装 speedtest ==="
           npm install -g speedtest-net
-          Write-Host ""
-          Write-Host "=== 网络速度测试（东京 28910） ==="
+
+      - name: 测试东京服务器 28910
+        shell: pwsh
+        run: |
+          Write-Host "=== 网络速度测试（东京 28910 - fdcservers.net） ==="
           speedtest-net --accept-license --accept-gdpr --server-id 28910
+
+      - name: 测试服务器 73226
+        shell: pwsh
+        run: |
+          Write-Host "=== 网络速度测试（73226） ==="
+          speedtest-net --accept-license --accept-gdpr --server-id 73226
+
+      - name: 测试服务器 29716
+        shell: pwsh
+        run: |
+          Write-Host "=== 网络速度测试（29716） ==="
+          speedtest-net --accept-license --accept-gdpr --server-id 29716
