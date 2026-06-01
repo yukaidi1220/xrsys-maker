@@ -57,7 +57,11 @@ jobs:
         run: |
           Write-Host "=== 开始释放内存 ==="
 
-          # 1. 停止不必要的服务
+          # 1. 禁用 Windows Defender 实时保护
+          Write-Host "禁用 Windows Defender 实时保护..."
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+
+          # 2. 停止不必要的服务
           $servicesToStop = @(
             "WSearch",           # Windows Search
             "SysMain",           # Superfetch
@@ -68,7 +72,30 @@ jobs:
             "RetailDemo",        # Retail Demo Service
             "XblAuthManager",    # Xbox Live Auth Manager
             "XblGameSave",       # Xbox Live Game Save
-            "XboxNetApiSvc"      # Xbox Live Networking Service
+            "XboxNetApiSvc",     # Xbox Live Networking Service
+            "Spooler",           # 打印服务
+            "Fax",               # 传真服务
+            "TabletInputService", # 触摸键盘和手写面板
+            "Themes",            # 主题服务
+            "AudioSrv",          # Windows Audio
+            "AudioEndpointBuilder", # Windows Audio Endpoint Builder
+            "Dhcp",              # DHCP 客户端
+            "Dnscache",          # DNS 客户端
+            "LanmanWorkstation", # 工作站
+            "LanmanServer",      # 服务器
+            "Browser",           # 计算机浏览器
+            "IpxlatSvc",         # IP 转换配置服务
+            "NlaSvc",            # 网络位置感知
+            "Netprofm",          # Network List Service
+            "Wcmsvc",            # Windows Connection Manager
+            "DusmSvc",           # 数据使用量
+            "AppXSvc",           # AppX Deployment Service
+            "ClipSVC",           # Client License Service
+            "LicenseManager",    # Windows License Manager
+            "InstallService",    # Microsoft Store 安装服务
+            "wuauserv",          # Windows Update
+            "UsoSvc",            # Update Orchestrator Service
+            "WaaSMedicSvc"       # Windows Update Medic Service
           )
 
           foreach ($svc in $servicesToStop) {
@@ -79,7 +106,7 @@ jobs:
             }
           }
 
-          # 2. 关闭不必要的进程
+          # 3. 关闭不必要的进程
           $processesToStop = @(
             "SearchUI",          # 搜索UI
             "StartMenuExperienceHost",  # 开始菜单
@@ -88,7 +115,28 @@ jobs:
             "NisSrv",            # Network Inspection Service
             "SpeechRuntime",     # 语音运行时
             "YourPhone",         # Your Phone
-            "PhoneExperienceHost"
+            "PhoneExperienceHost",
+            "explorer",          # 资源管理器
+            "dwm",               # 桌面窗口管理器
+            "sihost",            # Shell Infrastructure Host
+            "ctfmon",            # 输入法
+            "RuntimeBroker",     # Runtime Broker
+            "ShellHost",         # Shell Host
+            "taskhostw",         # Task Host
+            "TabTip",            # 触摸键盘
+            "InputApp",          # 输入应用
+            "ShellExperienceHost", # Shell Experience Host
+            "SearchApp",         # 搜索应用
+            "SearchIndexer",     # 搜索索引
+            "WerFault",          # Windows 错误报告
+            "WerFaultSecure",    # Windows 错误报告
+            "wermgr",            # Windows 错误报告管理器
+            "MpCmdRun",          # Defender 命令行
+            "MsMpEngCP",         # Defender CPU 保护
+            "docker",            # Docker
+            "containerd",        # Containerd
+            "conhost",           # 控制台窗口宿主
+            "OpenConsole"        # 新版控制台
           )
 
           foreach ($proc in $processesToStop) {
@@ -99,19 +147,40 @@ jobs:
             }
           }
 
-          # 3. 清理回收站
+          # 4. 清理回收站
           Write-Host "清理回收站..."
           Clear-RecycleBin -Force -ErrorAction SilentlyContinue
 
-          # 4. 清理临时文件
+          # 5. 清理临时文件
           Write-Host "清理临时文件..."
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-          # 5. 强制垃圾回收
+          # 6. 清理文件系统缓存
+          Write-Host "清理文件系统缓存..."
+          [System.IO.Directory]::GetFiles("C:\Windows\Prefetch", "*.pf") | Remove-Item -Force -ErrorAction SilentlyContinue
+
+          # 7. 强制垃圾回收
           Write-Host "执行垃圾回收..."
           [System.GC]::Collect()
           [System.GC]::WaitForPendingFinalizers()
+
+          # 8. 清理进程工作集
+          Write-Host "清理进程工作集..."
+          $code = @"
+          using System;
+          using System.Runtime.InteropServices;
+          public class MemoryHelper {
+            [DllImport("psapi.dll")]
+            public static extern int EmptyWorkingSet(IntPtr hwProc);
+          }
+          "@
+          Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+          Get-Process | ForEach-Object {
+            try {
+              [MemoryHelper]::EmptyWorkingSet($_.Handle) | Out-Null
+            } catch {}
+          }
 
           Write-Host "=== 内存释放完成 ==="
 
