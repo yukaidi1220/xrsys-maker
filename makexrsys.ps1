@@ -300,8 +300,8 @@ function Invoke-Aria2Download {
     $aria2 = "& .\bin\aria2c.exe $($Options -join ' ')"
 
     # handle aria2 console output
-    Write-Host 'Starting download with aria2 ...' -ForegroundColor Green
-    Write-Host "  Command: $aria2" -ForegroundColor Cyan
+    Write-Host '正在使用 aria2 下载 ...' -ForegroundColor Green
+    Write-Host "  命令: $aria2" -ForegroundColor Cyan
     Invoke-Command ([scriptblock]::Create($aria2))
 
     # handle aria2 error
@@ -543,15 +543,15 @@ function Test-Hashes {
     return $Hashes.GetEnumerator() | ForEach-Object {
         $file = $_.Key
         $expectedHash = $_.Value
-        Write-Host -ForegroundColor Blue "Verifying $file $Algorithm hash ..."
-        Write-Host -ForegroundColor Gray "Expected: $expectedHash"
+        Write-Host -ForegroundColor Blue "正在校验 $file 的 $Algorithm 哈希 ..."
+        Write-Host -ForegroundColor Gray "期望值: $expectedHash"
         $actualHash = (Get-FileHash -Path $file -Algorithm $Algorithm).Hash
-        Write-Host -ForegroundColor Gray "Actual  : $actualHash"
+        Write-Host -ForegroundColor Gray "实际值: $actualHash"
         if ($actualHash -ne $expectedHash) {
             # return $false
             Write-Error "$file hash not match."
         } else {
-            Write-Host -ForegroundColor Green "$file hash match."
+            Write-Host -ForegroundColor Green "$file 哈希校验通过。"
         }
     }
 }
@@ -565,7 +565,7 @@ if (-not (Test-Path -Path "C:\Program Files\7-Zip\7z.exe")) {
     Write-Error "7-zip not found, please install it manually!"
 }
 if (-not (Test-Path -Path ".\bin\aria2c.exe")) {
-    Write-Host "aria2c not found, downloading..."
+    Write-Host "未找到 aria2c，正在下载..."
     Invoke-WebRequest -Uri 'https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip' -OutFile ".\temp\aria2.zip"
     Expand-Archive -Path ".\temp\aria2.zip" -DestinationPath ".\temp" -Force
     Move-Item -Path ".\temp\aria2-1.37.0-win-64bit-build1\aria2c.exe" -Destination ".\bin\aria2c.exe" -Force
@@ -574,7 +574,7 @@ Test-SHA256 @{
     ".\bin\aria2c.exe" = "BE2099C214F63A3CB4954B09A0BECD6E2E34660B886D4C898D260FEBFE9D70C2" 
 }
 if (-not (Test-Path -Path ".\bin\wimlib-imagex.exe")) {
-    Write-Host "wimlib-imagex not found, downloading..."
+    Write-Host "未找到 wimlib-imagex，正在下载..."
     Invoke-WebRequest -Uri 'https://github.com/user-attachments/files/24684304/wimlib-1.14.4-windows-x86_64-bin.zip' -OutFile ".\temp\wimlib.zip"
     Expand-Archive -Path ".\temp\wimlib.zip" -DestinationPath ".\temp\wimlib" -Force
     Copy-Item -Path ".\temp\wimlib\wimlib-imagex.exe" -Destination ".\bin\wimlib-imagex.exe"
@@ -585,19 +585,19 @@ Test-SHA256 @{
     ".\bin\libwim-15.dll"     = "6480B53D4ECD4423AF9E100FE15E3D2C3D114EFF33FBA07977E46C1AB124342E"
 }
 if (-not (Test-Path -Path ".\bin\rclone.exe")) {
-    Write-Host "rclone not found, downloading..."
+    Write-Host "未找到 rclone，正在下载..."
     Invoke-WebRequest -Uri 'https://downloads.rclone.org/rclone-current-windows-amd64.zip' -outfile .\temp\rclone.zip
     Expand-Archive -Path .\temp\rclone.zip -DestinationPath .\temp\ -Force
     Copy-Item -Path .\temp\rclone-*-windows-amd64\rclone.exe -Destination .\bin\rclone.exe
 }
 
-Write-Host "Downloading original system image..."
+Write-Host "正在下载原版系统镜像..."
 Write-Status -Step "下载系统镜像" -Status "开始"
 Remove-Item -Path $osFile -Force -ErrorAction SilentlyContinue
 Invoke-Aria2Download -Uri $osUrl -Name $osFile -Big
 Write-Status -Step "下载系统镜像" -Status "完成"
 
-Write-Host "Verifying hash of original system image..."
+Write-Host "正在校验原版系统镜像哈希..."
 Write-Status -Step "验证镜像哈希" -Status "开始"
 if ($osMd5) {
     Test-MD5 @{ $osFile = $osMd5 }
@@ -612,14 +612,14 @@ if ($osFileext -eq ".iso") {
     Write-Status -Step "解压ISO镜像" -Status "开始"
     ."C:\Program Files\7-Zip\7z.exe" e -y "$osFile" sources\install.wim
     if (Test-Path -Path "install.wim") {
-        Write-Host "extract iso Successfully!"
+        Write-Host "ISO 解压成功！"
         $osFile = "install.wim"
         $osFilename = "install"
         $osFileext = ".wim"
     } else {
         ."C:\Program Files\7-Zip\7z.exe" e -y "$osFile" sources\install.esd
         if (Test-Path -Path "install.esd") {
-            Write-Host "extract esd Successfully!"
+            Write-Host "ESD 解压成功！"
             $osFile = "install.esd"
             $osFilename = "install"
             $osFileext = ".esd"
@@ -647,12 +647,12 @@ CREATE PARTITION PRIMARY
 FORMAT FS=NTFS QUICK
 ASSIGN LETTER=S
 "@ | diskpart.exe
-if ($?) { Write-Host "Create virtual disk Successfully!" } else { Write-Error "Create virtual disk Failed!" }
+if ($?) { Write-Host "虚拟磁盘创建成功！" } else { Write-Error "虚拟磁盘创建失败！" }
 $mountDir = "S:"
 Write-Status -Step "创建虚拟磁盘" -Status "完成"
 
 # extract imagefile use wimlib-imagex
-Write-Host "Extracting $osFile, please wait..."
+Write-Host "正在释放 $osFile，请稍候..."
 Write-Status -Step "释放镜像(wimlib apply)" -Status "开始"
 Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("apply", "$osFile", $osIndex, "$mountDir")
 Write-Status -Step "释放镜像(wimlib apply)" -Status "完成"
@@ -673,14 +673,14 @@ $utf8bom = New-Object System.Text.UTF8Encoding $true
 [System.IO.File]::WriteAllText("$mountDir\injectdeploy_utf8.bat", $gbkContent, $utf8bom)
 cmd.exe /c "$mountDir\injectdeploy_utf8.bat" /S
 Remove-Item -Path "$mountDir\injectdeploy_utf8.bat" -ErrorAction SilentlyContinue
-if ($?) { Write-Host "Inject Deploy Successfully!" } else { Write-Error "Inject Deploy Failed!" }
+if ($?) { Write-Host "部署文件注入成功！" } else { Write-Error "部署文件注入失败！" }
 Remove-Item -Path "$mountDir\injectdeploy.bat" -ErrorAction SilentlyContinue
 Write-Status -Step "注入部署文件" -Status "完成"
 
 # add drivers
 Write-Status -Step "下载并添加驱动" -Status "开始"
 Invoke-Aria2Download -Uri $osdrvurl -Destination ".\temp" -Name "drivers.iso" -Big
-if ($?) { Write-Host "Driver Download Successfully!" } else { Write-Error "Driver Download Failed!" }
+if ($?) { Write-Host "驱动下载成功！" } else { Write-Error "驱动下载失败！" }
 $isopath = Resolve-Path -Path ".\temp\drivers.iso"
 # $isomount = (Mount-DiskImage -ImagePath $isopath -PassThru | Get-Volume).DriveLetter
 # Copy-Item -Path "${isomount}:\" -Destination "$mountDir\Windows\WinDrive" -Recurse -Force -ErrorAction SilentlyContinue 
@@ -708,7 +708,7 @@ if ([int]$osVer -ge 10) {
     DISM.exe /Image:"$mountDir" /Remove-Edge
     DISM.exe /Image:"$mountDir" /Add-Edge /SupportPath:".\temp\Edge"
     if ($?) {
-        Write-Host "Edge runtime added successfully!"
+        Write-Host "Edge 运行时添加成功！"
     } else {
         # use old method if add edge runtime failed
         $msedge = (Invoke-RestMethod https://raw.githubusercontent.com/Bush2021/edge_installer/main/data.json)."msedge-stable-win-$osArch"
@@ -802,7 +802,7 @@ if ([int]$osVer -ge 10) {
         Remove-WindowsCapability -Path "$mountDir" -Name "Microsoft-Windows-OneDrive-Setup-Package" 
         Remove-WindowsCapability -Path "$mountDir" -Name "Microsoft-Windows-OneDrive-Setup-WOW64-Package" 
     } catch {
-        Write-Host "No OneDrive found, skipping..."
+        Write-Host "未找到 OneDrive，跳过..."
     }
 
     # remove recall
@@ -815,7 +815,7 @@ if ([int]$osVer -ge 10) {
     try {
         Get-WindowsCapability -Path "$mountDir" | Where-Object { $_.Name -like "*Sense.Client*" } | Remove-WindowsCapability -Path "$mountDir"
     } catch {
-        Write-Host "No Defender Sense Client found, skipping..."
+        Write-Host "未找到 Defender Sense Client，跳过..."
     }
 }
 
@@ -829,7 +829,7 @@ ${sysver}_${sysdate}
 # New-WindowsImage -ImagePath ".\$sysFile.wim" -CapturePath "$mountDir" -Name $sysVer -Description $sysVerCN
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "开始"
 Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("capture", "$mountDir", "$sysFile.esd", "$sysVer", "$sysVerCN", "--solid", "--compress=lzms:10", "--threads=4", "--solid-chunk-size=128M", "--image-property", "DISPLAYNAME=$sysVer", "--image-property", "DISPLAYDESCRIPTION=$sysVerCN")
-if ($?) { Write-Host "Capture Successfully!" } else { Write-Error "Capture Failed!" }
+if ($?) { Write-Host "镜像捕获成功！" } else { Write-Error "镜像捕获失败！" }
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "完成"
 
 # clean up mount dir
@@ -891,7 +891,7 @@ Write-Status -Step "生成文件校验和" -Status "结束"
 # Publish image
 Write-Status -Step "上传镜像到网盘" -Status "开始"
 .\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 1000M
-if ($?) { Write-Host "Upload Successfully!" } else { Write-Error "Upload Failed!" }
+if ($?) { Write-Host "上传成功！" } else { Write-Error "上传失败！" }
 .\bin\rclone.exe copy "$sysFile.json" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress
 # Set latest
 if ($Latest) {
