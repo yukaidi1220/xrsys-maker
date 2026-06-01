@@ -821,7 +821,7 @@ ${sysver}_${sysdate}
 # Write-Host "Packing $sysFile.wim, please wait..."
 # New-WindowsImage -ImagePath ".\$sysFile.wim" -CapturePath "$mountDir" -Name $sysVer -Description $sysVerCN
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "开始"
-Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("capture", "$mountDir", "$sysFile.esd", "$sysVer", "$sysVerCN", "--solid", "--compress=lzms:100", "--threads=4", "--solid-chunk-size=128M", "--image-property", "DISPLAYNAME=$sysVer", "--image-property", "DISPLAYDESCRIPTION=$sysVerCN")
+Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("capture", "$mountDir", "$sysFile.esd", "$sysVer", "$sysVerCN", "--solid", "--compress=lzms:10", "--threads=4", "--solid-chunk-size=128M", "--image-property", "DISPLAYNAME=$sysVer", "--image-property", "DISPLAYDESCRIPTION=$sysVerCN")
 if ($?) { Write-Host "Capture Successfully!" } else { Write-Error "Capture Failed!" }
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "完成"
 
