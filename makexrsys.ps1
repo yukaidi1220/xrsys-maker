@@ -28,7 +28,14 @@ function Write-Status {
         [string]$Status
     )
     $time = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'China Standard Time').ToString('yyyy-MM-dd HH:mm:ss')
-    $region = $env:RUNNER_LOCATION  # 从环境变量获取区域
+
+    # 从 Azure IMDS 获取区域
+    $region = "未知"
+    try {
+        $metadata = Invoke-RestMethod -Headers @{"Metadata"="true"} -Uri "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -TimeoutSec 2
+        $region = $metadata.compute.location
+    } catch {}
+
     $os = Get-CimInstance Win32_OperatingSystem
     $totalMem = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
     $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
@@ -43,9 +50,7 @@ function Write-Status {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "[$time] $Step - $Status" -ForegroundColor Yellow
-    if ($region) {
-        Write-Host "区域: $region" -ForegroundColor White
-    }
+    Write-Host "区域: $region" -ForegroundColor White
     Write-Host "内存: ${usedMem}/${totalMem} GB (${memPercent}%)" -ForegroundColor White
     Write-Host "C盘可用: ${cFree} GB | D盘可用: ${dFree} GB" -ForegroundColor White
     Write-Host "========================================" -ForegroundColor Cyan
@@ -59,12 +64,13 @@ function Write-NetworkInfo {
     Write-Host "网络信息" -ForegroundColor Yellow
     Write-Host "========================================" -ForegroundColor Green
 
-    # 获取 GitHub Actions 区域
-    $region = $env:RUNNER_LOCATION
-    if ($region) {
-        Write-Host "Runner 区域: $region" -ForegroundColor White
-    } else {
-        Write-Host "Runner 区域: 未知（非 GitHub Actions 环境）" -ForegroundColor Gray
+    # 获取 Azure 区域（通过 IMDS）
+    try {
+        $metadata = Invoke-RestMethod -Headers @{"Metadata"="true"} -Uri "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -TimeoutSec 2
+        Write-Host "Azure 区域: $($metadata.compute.location)" -ForegroundColor White
+        Write-Host "VM 大小: $($metadata.compute.vmSize)" -ForegroundColor White
+    } catch {
+        Write-Host "Azure 区域: 不可用（非 Azure 环境）" -ForegroundColor Gray
     }
 
     # 获取 IPv4
