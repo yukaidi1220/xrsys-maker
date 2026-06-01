@@ -190,7 +190,6 @@ jobs:
           # 创建测试 BAT 文件（GBK 编码，CR+LF）
           $lines = @(
             '@echo off'
-            'chcp 65001 >nul'
             'echo === 测试中文输出 ==='
             'echo 这是第一行中文'
             'echo 正在处理文件...'
@@ -199,20 +198,25 @@ jobs:
           )
           $batContent = $lines -join "`r`n"
 
-          # 使用 GBK 编码（代码页 936）
+          # 使用 GBK 编码写入
           $gbk = [System.Text.Encoding]::GetEncoding(936)
-          [System.IO.File]::WriteAllText(".\test.bat", $batContent, $gbk)
+          [System.IO.File]::WriteAllText(".\test_gbk.bat", $batContent, $gbk)
 
-          Write-Host "=== 测试 cmd.exe 调用 BAT 中文输出 ==="
+          Write-Host "=== 测试 GBK 转 UTF-8 ==="
           Write-Host ""
 
-          # 直接调用，不做编码处理
-          cmd.exe /c ".\test.bat"
+          # 读取 GBK 文件，转换为 UTF-8
+          $gbkContent = [System.IO.File]::ReadAllText(".\test_gbk.bat", $gbk)
+          $utf8bom = New-Object System.Text.UTF8Encoding $true
+          [System.IO.File]::WriteAllText(".\test_utf8.bat", $gbkContent, $utf8bom)
+
+          # 执行 UTF-8 版本
+          cmd.exe /c ".\test_utf8.bat"
 
           Write-Host ""
           Write-Host "=== 测试完成 ==="
 
-          Remove-Item ".\test.bat" -ErrorAction SilentlyContinue
+          Remove-Item ".\test_gbk.bat", ".\test_utf8.bat" -ErrorAction SilentlyContinue
 
       - name: 查看网络信息
         shell: pwsh
