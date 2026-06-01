@@ -28,6 +28,7 @@ function Write-Status {
         [string]$Status
     )
     $time = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'China Standard Time').ToString('yyyy-MM-dd HH:mm:ss')
+    $region = $env:RUNNER_LOCATION  # 从环境变量获取区域
     $os = Get-CimInstance Win32_OperatingSystem
     $totalMem = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
     $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
@@ -42,7 +43,9 @@ function Write-Status {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "[$time] $Step - $Status" -ForegroundColor Yellow
-    Write-Host "区域: $region" -ForegroundColor White
+    if ($region) {
+        Write-Host "区域: $region" -ForegroundColor White
+    }
     Write-Host "内存: ${usedMem}/${totalMem} GB (${memPercent}%)" -ForegroundColor White
     Write-Host "C盘可用: ${cFree} GB | D盘可用: ${dFree} GB" -ForegroundColor White
     Write-Host "========================================" -ForegroundColor Cyan
