@@ -18,38 +18,44 @@ jobs:
         run: |
           Write-Host "=== 测试 Runner 区域读取 ==="
 
-          # 方法1: RUNNER_LOCATION
+          # 方法1: RUNNER_LOCATION (已知为空)
           $runnerLocation = $env:RUNNER_LOCATION
           Write-Host "RUNNER_LOCATION: '$runnerLocation'"
 
-          # 方法2: 其他可能的环境变量
+          # 方法2: 尝试从 Azure IMDS 获取
+          Write-Host ""
+          Write-Host "=== 尝试 Azure IMDS ==="
+          try {
+            $metadata = Invoke-RestMethod -Headers @{"Metadata"="true"} -Uri "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -TimeoutSec 2
+            Write-Host "Azure 区域: $($metadata.compute.location)"
+            Write-Host "VM 名称: $($metadata.compute.name)"
+            Write-Host "VM 大小: $($metadata.compute.vmSize)"
+          } catch {
+            Write-Host "Azure IMDS 不可用: $($_.Exception.Message)"
+          }
+
+          # 方法3: 通过 IP 查询地理位置
+          Write-Host ""
+          Write-Host "=== 通过 IP 查询位置 ==="
+          try {
+            $ipv4 = (Invoke-WebRequest -Uri "https://4.itdog.cn" -TimeoutSec 5 -UseBasicParsing).Content.Trim()
+            Write-Host "IPv4: $ipv4"
+
+            # 使用 ip-api.com 查询位置
+            $geo = Invoke-RestMethod -Uri "http://ip-api.com/json/$ipv4" -TimeoutSec 5
+            Write-Host "国家: $($geo.country)"
+            Write-Host "地区: $($geo.regionName)"
+            Write-Host "城市: $($geo.city)"
+            Write-Host "ISP: $($geo.isp)"
+          } catch {
+            Write-Host "IP 位置查询失败: $($_.Exception.Message)"
+          }
+
+          # 方法4: 所有 Runner 相关环境变量
           Write-Host ""
           Write-Host "=== 所有 Runner 相关环境变量 ==="
           Get-ChildItem env: | Where-Object { $_.Name -like "*RUNNER*" -or $_.Name -like "*GITHUB*" } |
             Format-Table Name, Value -AutoSize
-
-          # 方法3: 从系统信息推断
-          Write-Host ""
-          Write-Host "=== 系统时区 ==="
-          $tz = [System.TimeZoneInfo]::Local
-          Write-Host "时区: $($tz.Id) - $($tz.DisplayName)"
-
-          # 方法4: 尝试获取公网 IP 和地理位置
-          Write-Host ""
-          Write-Host "=== 网络信息 ==="
-          try {
-            $ipv4 = Invoke-WebRequest -Uri "https://4.itdog.cn" -TimeoutSec 5 -UseBasicParsing | Select-Object -ExpandProperty Content
-            Write-Host "IPv4: $($ipv4.Trim())"
-          } catch {
-            Write-Host "IPv4: 获取失败"
-          }
-
-          try {
-            $ipv6 = Invoke-WebRequest -Uri "https://6.itdog.cn" -TimeoutSec 5 -UseBasicParsing | Select-Object -ExpandProperty Content
-            Write-Host "IPv6: $($ipv6.Trim())"
-          } catch {
-            Write-Host "IPv6: 获取失败或不支持"
-          }
 
       - name: 查看分区信息
         shell: pwsh
