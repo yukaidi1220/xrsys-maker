@@ -94,12 +94,6 @@ jobs:
           Write-Host "=== 安装 speedtest ==="
           npm install -g speedtest-net
 
-      - name: 测试东京服务器 28910
-        shell: pwsh
-        run: |
-          Write-Host "=== 网络速度测试（东京 28910 - fdcservers.net） ==="
-          speedtest-net --accept-license --accept-gdpr --server-id 28910
-
       - name: 测试服务器 73226
         shell: pwsh
         run: |
@@ -111,3 +105,9 @@ jobs:
         run: |
           Write-Host "=== 网络速度测试（29716） ==="
           speedtest-net --accept-license --accept-gdpr --server-id 29716
+
+      - name: 测试新加坡服务器 26654
+        shell: pwsh
+        run: |
+          Write-Host "=== 网络速度测试（新加坡 26654 - fdcservers） ==="
+          speedtest-net --accept-license --accept-gdpr --server-id 26654
