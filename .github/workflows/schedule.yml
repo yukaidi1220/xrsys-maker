@@ -46,7 +46,7 @@ jobs:
       - name: 获取 rclone 配置
         uses: actions/checkout@v6
         with:
-          repository: xrgzs/rclone-action
+          repository: yukaidi1220/rclone-action
           token: ${{ secrets.RCLONE_TOKEN }}
           path: bin
 
