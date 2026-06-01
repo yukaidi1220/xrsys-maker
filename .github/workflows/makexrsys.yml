@@ -1,10 +1,10 @@
-name: MakeXRSYS
-run-name: Make XRSYS ${{ inputs.target }}${{ inputs.fulldrv == true && ' - Full Drivers' || ' - Lite Drivers' }}${{ inputs.latest == true && ' - Latest' || '' }}
+name: 制作潇然系统
+run-name: 制作潇然系统 ${{ inputs.target }}${{ inputs.fulldrv == true && ' - 完整驱动' || ' - 精简驱动' }}${{ inputs.latest == true && ' - 最新' || '' }}
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: "Target OS Version"
+        description: "目标系统版本"
         required: true
         type: choice
         options:
@@ -22,12 +22,12 @@ on:
           - w10lt1664
           - w7ult64
       fulldrv:
-        description: "Add Full Drivers"
+        description: "添加完整驱动"
         required: false
         default: false
         type: boolean
       latest:
-        description: "As Latest"
+        description: "标记为最新版本"
         required: false
         default: false
         type: boolean
@@ -36,20 +36,20 @@ jobs:
   makexrsys:
     runs-on: windows-latest
     steps:
-      - name: Checkout repository
+      - name: 检出仓库
         uses: actions/checkout@v6
 
-      - name: Get rclone Config
+      - name: 获取 rclone 配置
         uses: actions/checkout@v6
         with:
           repository: xrgzs/rclone-action
           token: ${{ secrets.RCLONE_TOKEN }}
           path: bin
 
-      - name: Big Task
+      - name: 执行构建任务
         shell: pwsh
         run: |
-          # Install gsudo
+          # 安装 gsudo
           Invoke-WebRequest -Uri "https://github.com/gerardog/gsudo/releases/download/v2.6.1/gsudo.portable.zip" -OutFile "gsudo.zip"
           Expand-Archive -Path "gsudo.zip" -DestinationPath "gsudo"
           $env:Path = "$PWD\gsudo\x64;$env:Path"

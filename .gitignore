@@ -1,0 +1,35 @@
+# Windows 系统文件
+desktop.ini
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# 临时文件
+*.tmp
+*.temp
+~$*
+
+# 构建产物
+*.zip
+*.exe
+*.msi
+*.iso
+
+# 日志文件
+*.log
+
+# VSCode
+.vscode/settings.json
+.vscode/launch.json
+
+# JetBrains
+.idea/
+
+# 通用
+*.bak
+*.swp
+*.swo

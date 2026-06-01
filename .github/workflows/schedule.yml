@@ -1,14 +1,14 @@
-name: AutoMakeXRSYS
+name: 自动批量制作潇然系统
 on:
   workflow_dispatch:
   schedule:
-    # - cron: '0 0 * * *' #nightly
-    - cron: "0 0 * * 5" #weekly
+    # - cron: '0 0 * * *' # 每日构建
+    - cron: "0 0 * * 5" # 每周构建
 
 jobs:
   makexrsys:
     runs-on: windows-latest
-    name: ${{ matrix.target }}${{ matrix.fulldrv == true && '-fulldrv' || '' }}
+    name: ${{ matrix.target }}${{ matrix.fulldrv == true && '-完整驱动' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -29,7 +29,7 @@ jobs:
         fulldrv:
           - true
           - false
-        # no arm64 fulldrv
+        # ARM64 不支持完整驱动
         exclude:
           - target: w1126h1a64
             fulldrv: true
@@ -40,20 +40,20 @@ jobs:
           - target: w11lt24a64
             fulldrv: true
     steps:
-      - name: Checkout repository
+      - name: 检出仓库
         uses: actions/checkout@v6
 
-      - name: Get rclone Config
+      - name: 获取 rclone 配置
         uses: actions/checkout@v6
         with:
           repository: xrgzs/rclone-action
           token: ${{ secrets.RCLONE_TOKEN }}
           path: bin
 
-      - name: Big Task
+      - name: 执行构建任务
         shell: pwsh
         run: |
-          # Install gsudo
+          # 安装 gsudo
           Invoke-WebRequest -Uri "https://github.com/gerardog/gsudo/releases/download/v2.6.1/gsudo.portable.zip" -OutFile "gsudo.zip"
           Expand-Archive -Path "gsudo.zip" -DestinationPath "gsudo"
           $env:Path = "$PWD\gsudo\x64;$env:Path"
