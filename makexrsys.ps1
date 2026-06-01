@@ -676,7 +676,7 @@ $sysFileSHA256 = Get-FileHash ".\$sysFile.esd" -Algorithm SHA256 | Select-Object
 } | ConvertTo-Json | Out-File -FilePath ".\$sysFile.json" -Encoding utf8
 
 # Publish image
-.\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress
+.\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 60Mi
 if ($?) { Write-Host "Upload Successfully!" } else { Write-Error "Upload Failed!" }
 .\bin\rclone.exe copy "$sysFile.json" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress
 # Set latest
