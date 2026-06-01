@@ -21,6 +21,33 @@ param(
 $ErrorActionPreference = 'Stop'
 $Server = "https://list.xrgzs.top"
 
+# 监控函数：输出系统状态
+function Write-Status {
+    param(
+        [string]$Step,
+        [string]$Status
+    )
+    $time = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'China Standard Time').ToString('yyyy-MM-dd HH:mm:ss')
+    $os = Get-CimInstance Win32_OperatingSystem
+    $totalMem = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
+    $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+    $usedMem = [math]::Round($totalMem - $freeMem, 2)
+    $memPercent = [math]::Round(($usedMem / $totalMem) * 100, 1)
+
+    $cDrive = Get-Volume -DriveLetter C -ErrorAction SilentlyContinue
+    $dDrive = Get-Volume -DriveLetter D -ErrorAction SilentlyContinue
+    $cFree = if ($cDrive) { [math]::Round($cDrive.SizeRemaining / 1GB, 2) } else { "N/A" }
+    $dFree = if ($dDrive) { [math]::Round($dDrive.SizeRemaining / 1GB, 2) } else { "N/A" }
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "[$time] $Step - $Status" -ForegroundColor Yellow
+    Write-Host "内存: ${usedMem}/${totalMem} GB (${memPercent}%)" -ForegroundColor White
+    Write-Host "C盘可用: ${cFree} GB | D盘可用: ${dFree} GB" -ForegroundColor White
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+}
+
 function Invoke-Aria2Download {
     param (
         [Parameter(Mandatory = $true, Position = 0)]
@@ -417,19 +444,24 @@ if (-not (Test-Path -Path ".\bin\rclone.exe")) {
 }
 
 Write-Host "Downloading original system image..."
-Remove-Item -Path $osFile -Force -ErrorAction SilentlyContinue 
+Write-Status -Step "下载系统镜像" -Status "开始"
+Remove-Item -Path $osFile -Force -ErrorAction SilentlyContinue
 Invoke-Aria2Download -Uri $osUrl -Name $osFile -Big
+Write-Status -Step "下载系统镜像" -Status "完成"
 
 Write-Host "Verifying hash of original system image..."
+Write-Status -Step "验证镜像哈希" -Status "开始"
 if ($osMd5) {
     Test-MD5 @{ $osFile = $osMd5 }
 }
 
 $osFileext = [System.IO.Path]::GetExtension("$osFile")
 $osFilename = [System.IO.Path]::GetFileNameWithoutExtension("$osFile")
+Write-Status -Step "验证镜像哈希" -Status "完成"
 
 # extract iso
 if ($osFileext -eq ".iso") {
+    Write-Status -Step "解压ISO镜像" -Status "开始"
     ."C:\Program Files\7-Zip\7z.exe" e -y "$osFile" sources\install.wim
     if (Test-Path -Path "install.wim") {
         Write-Host "extract iso Successfully!"
@@ -447,6 +479,7 @@ if ($osFileext -eq ".iso") {
             Write-Error "extract wim or esd failed!"
         }
     }
+    Write-Status -Step "解压ISO镜像" -Status "完成"
 }
 # convert esd to wim
 # if ($osFileext -eq ".esd") {
@@ -456,7 +489,8 @@ if ($osFileext -eq ".iso") {
 # make xrsys image
 # Create virtual disk
 $vhdfile = Join-Path -Path (Get-Location) -ChildPath "sys.vhdx"
-Remove-Item $vhdfile -ErrorAction SilentlyContinue 
+Remove-Item $vhdfile -ErrorAction SilentlyContinue
+Write-Status -Step "创建虚拟磁盘" -Status "开始"
 @"
 CREATE VDISK FILE="$vhdfile" MAXIMUM=102400 TYPE=EXPANDABLE
 SELECT VDISK FILE="$vhdfile"
@@ -467,11 +501,15 @@ ASSIGN LETTER=S
 "@ | diskpart.exe
 if ($?) { Write-Host "Create virtual disk Successfully!" } else { Write-Error "Create virtual disk Failed!" }
 $mountDir = "S:"
+Write-Status -Step "创建虚拟磁盘" -Status "完成"
 
 # extract imagefile use wimlib-imagex
 Write-Host "Extracting $osFile, please wait..."
+Write-Status -Step "释放镜像(wimlib apply)" -Status "开始"
 .\bin\wimlib-imagex.exe apply "$osFile" $osIndex "$mountDir"
+Write-Status -Step "释放镜像(wimlib apply)" -Status "完成"
 # inject deploy
+Write-Status -Step "注入部署文件" -Status "开始"
 Expand-Archive -Path ".\injectdeploy.zip" -DestinationPath "$mountDir" -Force
 Invoke-Aria2Download -Uri "$Server/d/pxy/Xiaoran%20Studio/Onekey/Config/osc.exe" -Destination $mountDir -Name "osc.exe"
 Copy-Item -Path ".\injectdeploy.bat" -Destination "$mountDir" -Force
@@ -481,9 +519,11 @@ if ($sysArch -eq "arm64") {
 Copy-Item -Path ".\unattend.xml" -Destination "$mountDir" -Force
 & "$mountDir\injectdeploy.bat" /S
 if ($?) { Write-Host "Inject Deploy Successfully!" } else { Write-Error "Inject Deploy Failed!" }
-Remove-Item -Path "$mountDir\injectdeploy.bat" -ErrorAction SilentlyContinue 
+Remove-Item -Path "$mountDir\injectdeploy.bat" -ErrorAction SilentlyContinue
+Write-Status -Step "注入部署文件" -Status "完成"
 
 # add drivers
+Write-Status -Step "下载并添加驱动" -Status "开始"
 Invoke-Aria2Download -Uri $osdrvurl -Destination ".\temp" -Name "drivers.iso" -Big
 if ($?) { Write-Host "Driver Download Successfully!" } else { Write-Error "Driver Download Failed!" }
 $isopath = Resolve-Path -Path ".\temp\drivers.iso"
@@ -632,8 +672,10 @@ ${sysver}_${sysdate}
 # capture system image
 # Write-Host "Packing $sysFile.wim, please wait..."
 # New-WindowsImage -ImagePath ".\$sysFile.wim" -CapturePath "$mountDir" -Name $sysVer -Description $sysVerCN
+Write-Status -Step "捕获镜像(wimlib capture)" -Status "开始"
 .\bin\wimlib-imagex.exe capture "$mountDir" "$sysFile.esd" "$sysVer" "$sysVerCN" --solid --compress=lzms:100 --threads=4 --solid-chunk-size=128M --image-property "DISPLAYNAME=$sysVer" --image-property "DISPLAYDESCRIPTION=$sysVerCN"
 if ($?) { Write-Host "Capture Successfully!" } else { Write-Error "Capture Failed!" }
+Write-Status -Step "捕获镜像(wimlib capture)" -Status "完成"
 
 # clean up mount dir
 # Dismount-DiskImage -Path "$mountDir" -Discard
@@ -676,6 +718,7 @@ $sysFileSHA256 = Get-FileHash ".\$sysFile.esd" -Algorithm SHA256 | Select-Object
 } | ConvertTo-Json | Out-File -FilePath ".\$sysFile.json" -Encoding utf8
 
 # Publish image
+Write-Status -Step "上传镜像到网盘" -Status "开始"
 .\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 60Mi
 if ($?) { Write-Host "Upload Successfully!" } else { Write-Error "Upload Failed!" }
 .\bin\rclone.exe copy "$sysFile.json" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress
@@ -683,3 +726,5 @@ if ($?) { Write-Host "Upload Successfully!" } else { Write-Error "Upload Failed!
 if ($Latest) {
     .\bin\rclone.exe copyto "$sysFile.json" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysVer.json" --progress
 }
+Write-Status -Step "上传镜像到网盘" -Status "完成"
+Write-Status -Step "全部完成" -Status "成功"
