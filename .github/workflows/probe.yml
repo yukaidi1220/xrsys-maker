@@ -190,6 +190,7 @@ jobs:
           # 创建测试 BAT 文件（GBK 编码，CR+LF）
           $lines = @(
             '@echo off'
+            'chcp 65001 >nul'
             'echo === 测试中文输出 ==='
             'echo 这是第一行中文'
             'echo 正在处理文件...'
@@ -205,21 +206,10 @@ jobs:
           Write-Host "=== 测试 cmd.exe 调用 BAT 中文输出 ==="
           Write-Host ""
 
-          # 捕获 cmd.exe 输出（原始字节）
-          $psi = New-Object System.Diagnostics.ProcessStartInfo
-          $psi.FileName = "cmd.exe"
-          $psi.Arguments = "/c .\test.bat"
-          $psi.UseShellExecute = $false
-          $psi.RedirectStandardOutput = $true
-          $psi.StandardOutputEncoding = $gbk
+          # 直接调用，不做编码处理
+          cmd.exe /c ".\test.bat"
 
-          $process = [System.Diagnostics.Process]::Start($psi)
-          $output = $process.StandardOutput.ReadToEnd()
-          $process.WaitForExit()
-
-          # 输出（已经是 UTF-8 字符串了）
-          Write-Host $output
-
+          Write-Host ""
           Write-Host "=== 测试完成 ==="
 
           Remove-Item ".\test.bat" -ErrorAction SilentlyContinue
