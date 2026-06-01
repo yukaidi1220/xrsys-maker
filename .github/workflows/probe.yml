@@ -187,10 +187,10 @@ jobs:
       - name: 测试 BAT 中文编码
         shell: pwsh
         run: |
-          # 创建测试 BAT 文件（GBK 编码，CR+LF）
+          # 创建测试 BAT 文件（UTF-8 编码，CR+LF）
           $lines = @(
             '@echo off'
-            'chcp 936 >nul'
+            'chcp 65001 >nul'
             'echo === 测试中文输出 ==='
             'echo 这是第一行中文'
             'echo 正在处理文件...'
@@ -199,9 +199,9 @@ jobs:
           )
           $batContent = $lines -join "`r`n"
 
-          # 明确使用 GBK 编码（代码页 936）
-          $gbk = [System.Text.Encoding]::GetEncoding(936)
-          [System.IO.File]::WriteAllText(".\test.bat", $batContent, $gbk)
+          # 使用 UTF-8 编码（带 BOM）
+          $utf8bom = New-Object System.Text.UTF8Encoding $true
+          [System.IO.File]::WriteAllText(".\test.bat", $batContent, $utf8bom)
 
           Write-Host "=== 测试 cmd.exe 调用 BAT 中文输出 ==="
           Write-Host ""
