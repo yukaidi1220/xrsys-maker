@@ -890,7 +890,7 @@ Write-Status -Step "生成文件校验和" -Status "结束"
 
 # Publish image
 Write-Status -Step "上传镜像到网盘" -Status "开始"
-.\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 1000M
+.\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 250M
 if ($?) { Write-Host "上传成功！" } else { Write-Error "上传失败！" }
 .\bin\rclone.exe copy "$sysFile.json" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress
 # Set latest
