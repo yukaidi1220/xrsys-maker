@@ -202,15 +202,18 @@ jobs:
           $gbk = [System.Text.Encoding]::GetEncoding(936)
           [System.IO.File]::WriteAllText(".\test_gbk.bat", $batContent, $gbk)
 
-          Write-Host "=== 测试 GBK 转 UTF-8 ==="
-          Write-Host ""
-
           # 读取 GBK 文件，转换为 UTF-8
           $gbkContent = [System.IO.File]::ReadAllText(".\test_gbk.bat", $gbk)
           $utf8bom = New-Object System.Text.UTF8Encoding $true
           [System.IO.File]::WriteAllText(".\test_utf8.bat", $gbkContent, $utf8bom)
 
-          # 执行 UTF-8 版本
+          Write-Host "=== 执行 GBK 版本 ==="
+          Write-Host ""
+          cmd.exe /c ".\test_gbk.bat"
+
+          Write-Host ""
+          Write-Host "=== 执行 UTF-8 版本 ==="
+          Write-Host ""
           cmd.exe /c ".\test_utf8.bat"
 
           Write-Host ""
