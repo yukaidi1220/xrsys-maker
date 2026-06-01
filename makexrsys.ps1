@@ -842,11 +842,26 @@ Write-Status -Step "捕获镜像(wimlib capture)" -Status "完成"
 # .\bin\wimlib-imagex.exe export "$sysFile.wim" all "$sysFile.esd" --solid
 # if ($?) { Write-Host "Convert Successfully!"} else {Write-Error "Convert Failed!"}
 
+Write-Status -Step "生成文件校验和" -Status "开始"
 # Get file information
 $sysFileByte = (Get-ItemProperty ".\$sysFile.esd").Length
 $sysFileSize = [Math]::Round($sysFileByte / 1024 / 1024 / 1024, 2)
-$sysFileMD5 = Get-FileHash ".\$sysFile.esd" -Algorithm MD5 | Select-Object -ExpandProperty Hash
-$sysFileSHA256 = Get-FileHash ".\$sysFile.esd" -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+Write-Host "文件大小: $sysFileSize GB ($sysFileByte 字节)"
+# 单次读取文件，同时计算 MD5 和 SHA256，避免重复 IO
+$filePath = ".\$sysFile.esd"
+$md5 = [System.Security.Cryptography.MD5]::Create()
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+$stream = [System.IO.File]::OpenRead($filePath)
+$buffer = [byte[]]::new(1MB)
+while (($read = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+    $null = $md5.TransformBlock($buffer, 0, $read, $null, 0)
+    $null = $sha256.TransformBlock($buffer, 0, $read, $null, 0)
+}
+$null = $md5.TransformFinalBlock([byte[]]::new(0), 0, 0)
+$null = $sha256.TransformFinalBlock([byte[]]::new(0), 0, 0)
+$sysFileMD5 = [BitConverter]::ToString($md5.Hash).Replace('-', '').ToLower()
+$sysFileSHA256 = [BitConverter]::ToString($sha256.Hash).Replace('-', '').ToLower()
+$stream.Close(); $md5.Dispose(); $sha256.Dispose()
 @{
     "sys" = @{
         "ver"      = [string]$sysVer
@@ -868,10 +883,11 @@ $sysFileSHA256 = Get-FileHash ".\$sysFile.esd" -Algorithm SHA256 | Select-Object
         "index"   = $osIndex
     }
 } | ConvertTo-Json | Out-File -FilePath ".\$sysFile.json" -Encoding utf8
+Write-Status -Step "生成文件校验和" -Status "结束"
 
 # Publish image
 Write-Status -Step "上传镜像到网盘" -Status "开始"
-.\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 1G
+.\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 1000M
 if ($?) { Write-Host "Upload Successfully!" } else { Write-Error "Upload Failed!" }
 .\bin\rclone.exe copy "$sysFile.json" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress
 # Set latest
