@@ -632,7 +632,7 @@ ${sysver}_${sysdate}
 # capture system image
 # Write-Host "Packing $sysFile.wim, please wait..."
 # New-WindowsImage -ImagePath ".\$sysFile.wim" -CapturePath "$mountDir" -Name $sysVer -Description $sysVerCN
-.\bin\wimlib-imagex.exe capture "$mountDir" "$sysFile.esd" "$sysVer" "$sysVerCN" --solid  --image-property "DISPLAYNAME=$sysVer" --image-property "DISPLAYDESCRIPTION=$sysVerCN"
+.\bin\wimlib-imagex.exe capture "$mountDir" "$sysFile.esd" "$sysVer" "$sysVerCN" --solid --compress=lzms:100 --threads=4 --solid-chunk-size=128M --image-property "DISPLAYNAME=$sysVer" --image-property "DISPLAYDESCRIPTION=$sysVerCN"
 if ($?) { Write-Host "Capture Successfully!" } else { Write-Error "Capture Failed!" }
 
 # clean up mount dir
