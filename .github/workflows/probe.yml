@@ -65,6 +65,95 @@ jobs:
           Start-Sleep -Seconds 5
           Write-Status -Step "测试任务2" -Status "完成"
 
+      - name: 测试 wimlib 日志限速
+        shell: pwsh
+        run: |
+          # wimlib 日志限速输出函数
+          function Invoke-Wimlib {
+            param([string[]]$Arguments)
+
+            $rateLimitedPatterns = @(
+              'Creating files',
+              'Extracting file data',
+              'Applying metadata to files',
+              'MiB scanned',
+              'Archiving file data'
+            )
+
+            $lastOutputTime = [DateTime]::MinValue
+            $logFile = ".\wimlib_temp.log"
+
+            $process = Start-Process -FilePath $Arguments[0] -ArgumentList $Arguments[1..($Arguments.Length-1)] -PassThru -NoNewWindow -RedirectStandardOutput $logFile
+
+            while (!$process.HasExited) {
+              Start-Sleep -Milliseconds 100
+              if (Test-Path $logFile) {
+                $lines = Get-Content $logFile -ErrorAction SilentlyContinue
+                foreach ($line in $lines) {
+                  $shouldRateLimit = $false
+                  foreach ($pattern in $rateLimitedPatterns) {
+                    if ($line -match [regex]::Escape($pattern)) {
+                      $shouldRateLimit = $true
+                      break
+                    }
+                  }
+
+                  if ($shouldRateLimit) {
+                    $now = [DateTime]::UtcNow
+                    if (($now - $lastOutputTime).TotalSeconds -ge 15) {
+                      Write-Host $line
+                      $lastOutputTime = $now
+                    }
+                  } else {
+                    Write-Host $line
+                  }
+                }
+                Clear-Content $logFile -ErrorAction SilentlyContinue
+              }
+            }
+
+            # 输出剩余内容
+            if (Test-Path $logFile) {
+              $remaining = Get-Content $logFile -ErrorAction SilentlyContinue
+              foreach ($line in $remaining) { Write-Host $line }
+              Remove-Item $logFile -ErrorAction SilentlyContinue
+            }
+
+            return $process.ExitCode
+          }
+
+          # 创建模拟脚本：快速输出大量日志
+          $mockScript = @'
+          for ($i = 1; $i -le 10; $i++) {
+            Write-Output "Creating files [$i/10]..."
+            Start-Sleep -Milliseconds 500
+          }
+          Write-Output "Processing normal log line 1"
+          for ($i = 1; $i -le 5; $i++) {
+            Write-Output "Extracting file data [$i/5]..."
+            Start-Sleep -Milliseconds 500
+          }
+          Write-Output "Processing normal log line 2"
+          Write-Output "Applying metadata to files..."
+          Write-Output "MiB scanned 1024"
+          Write-Output "Archiving file data..."
+          for ($i = 1; $i -le 10; $i++) {
+            Write-Output "Extracting file data [$i/10]..."
+            Start-Sleep -Milliseconds 300
+          }
+          Write-Output "Done!"
+          '@
+
+          Set-Content -Path ".\mock_wimlib.ps1" -Value $mockScript
+
+          Write-Host "=== 测试 wimlib 日志限速 ==="
+          Write-Host "预期：关键词行每15秒输出一次，普通行直接输出"
+          Write-Host ""
+
+          Invoke-Wimlib @("pwsh", "-File", ".\mock_wimlib.ps1")
+
+          Remove-Item ".\mock_wimlib.ps1" -ErrorAction SilentlyContinue
+
       - name: 查看网络信息
         shell: pwsh
         run: |
