@@ -94,5 +94,5 @@ jobs:
           Write-Host "=== 安装 speedtest ==="
           npm install -g speedtest-net
           Write-Host ""
-          Write-Host "=== 网络速度测试 ==="
-          speedtest-net --accept-license --accept-gdpr
+          Write-Host "=== 网络速度测试（东京 28910） ==="
+          speedtest-net --accept-license --accept-gdpr --server-id 28910
