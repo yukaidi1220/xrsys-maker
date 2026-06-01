@@ -92,6 +92,30 @@ jobs:
         run: |
           Write-Host "=== 安装 speedtest-cli ==="
           choco install speedtest-cli -y
+          # 刷新环境变量
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
           Write-Host ""
           Write-Host "=== 网络速度测试 ==="
-          speedtest --accept-license --accept-gdpr
+          # 尝试多个可能的路径
+          $speedtestPaths = @(
+            "speedtest",
+            "speedtest.exe",
+            "C:\ProgramData\chocolatey\bin\speedtest.exe",
+            "C:\ProgramData\chocolatey\bin\speedtest-cli.exe"
+          )
+          $found = $false
+          foreach ($path in $speedtestPaths) {
+            try {
+              $cmd = Get-Command $path -ErrorAction Stop
+              Write-Host "找到 speedtest: $($cmd.Source)"
+              & $cmd.Source --accept-license --accept-gdpr
+              $found = $true
+              break
+            } catch {
+              continue
+            }
+          }
+          if (-not $found) {
+            Write-Host "未找到 speedtest，尝试直接调用..."
+            & "C:\ProgramData\chocolatey\bin\speedtest.exe" --accept-license --accept-gdpr 2>&1 || Write-Warning "speedtest 调用失败"
+          }
