@@ -13,6 +13,58 @@ jobs:
   probe:
     runs-on: windows-latest
     steps:
+      - name: 测试计时函数
+        shell: pwsh
+        run: |
+          # 计时器
+          $script:StepTimers = @{}
+
+          # 监控函数：输出系统状态和耗时
+          function Write-Status {
+            param(
+              [string]$Step,
+              [string]$Status
+            )
+            $time = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'China Standard Time').ToString('yyyy-MM-dd HH:mm:ss')
+            $os = Get-CimInstance Win32_OperatingSystem
+            $totalMem = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
+            $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
+            $usedMem = [math]::Round($totalMem - $freeMem, 2)
+            $memPercent = [math]::Round(($usedMem / $totalMem) * 100, 1)
+
+            $cDrive = Get-Volume -DriveLetter C -ErrorAction SilentlyContinue
+            $dDrive = Get-Volume -DriveLetter D -ErrorAction SilentlyContinue
+            $cFree = if ($cDrive) { [math]::Round($cDrive.SizeRemaining / 1GB, 2) } else { "N/A" }
+            $dFree = if ($dDrive) { [math]::Round($dDrive.SizeRemaining / 1GB, 2) } else { "N/A" }
+
+            # 计时逻辑
+            $duration = ""
+            if ($Status -eq "开始") {
+              $script:StepTimers[$Step] = [DateTime]::UtcNow
+            } elseif ($Status -eq "完成" -and $script:StepTimers.ContainsKey($Step)) {
+              $elapsed = [DateTime]::UtcNow - $script:StepTimers[$Step]
+              $duration = " | 耗时: {0:hh\:mm\:ss}" -f $elapsed
+              $script:StepTimers.Remove($Step)
+            }
+
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Cyan
+            Write-Host "[$time] $Step - $Status$duration" -ForegroundColor Yellow
+            Write-Host "内存: ${usedMem}/${totalMem} GB (${memPercent}%)" -ForegroundColor White
+            Write-Host "C盘可用: ${cFree} GB | D盘可用: ${dFree} GB" -ForegroundColor White
+            Write-Host "========================================" -ForegroundColor Cyan
+            Write-Host ""
+          }
+
+          # 测试
+          Write-Status -Step "测试任务1" -Status "开始"
+          Start-Sleep -Seconds 3
+          Write-Status -Step "测试任务1" -Status "完成"
+
+          Write-Status -Step "测试任务2" -Status "开始"
+          Start-Sleep -Seconds 5
+          Write-Status -Step "测试任务2" -Status "完成"
+
       - name: 查看网络信息
         shell: pwsh
         run: |
