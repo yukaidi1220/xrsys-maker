@@ -28,14 +28,6 @@ function Write-Status {
         [string]$Status
     )
     $time = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'China Standard Time').ToString('yyyy-MM-dd HH:mm:ss')
-
-    # 从 Azure IMDS 获取区域
-    $region = "未知"
-    try {
-        $metadata = Invoke-RestMethod -Headers @{"Metadata"="true"} -Uri "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -TimeoutSec 2
-        $region = $metadata.compute.location
-    } catch {}
-
     $os = Get-CimInstance Win32_OperatingSystem
     $totalMem = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
     $freeMem = [math]::Round($os.FreePhysicalMemory / 1MB, 2)
@@ -50,7 +42,6 @@ function Write-Status {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "[$time] $Step - $Status" -ForegroundColor Yellow
-    Write-Host "区域: $region" -ForegroundColor White
     Write-Host "内存: ${usedMem}/${totalMem} GB (${memPercent}%)" -ForegroundColor White
     Write-Host "C盘可用: ${cFree} GB | D盘可用: ${dFree} GB" -ForegroundColor White
     Write-Host "========================================" -ForegroundColor Cyan
