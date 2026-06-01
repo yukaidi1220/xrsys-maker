@@ -70,7 +70,10 @@ jobs:
         run: |
           # wimlib 日志限速输出函数
           function Invoke-Wimlib {
-            param([string[]]$Arguments)
+            param(
+              [string]$FilePath,
+              [string[]]$Arguments
+            )
 
             $rateLimitedPatterns = @(
               'Creating files',
@@ -83,7 +86,7 @@ jobs:
             $lastOutputTime = [DateTime]::MinValue
             $logFile = ".\wimlib_temp.log"
 
-            $process = Start-Process -FilePath $Arguments[0] -ArgumentList $Arguments[1..($Arguments.Length-1)] -PassThru -NoNewWindow -RedirectStandardOutput $logFile
+            $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru -NoNewWindow -RedirectStandardOutput $logFile
 
             while (!$process.HasExited) {
               Start-Sleep -Milliseconds 100
@@ -150,7 +153,7 @@ jobs:
           Write-Host "预期：关键词行每15秒输出一次，普通行直接输出"
           Write-Host ""
 
-          Invoke-Wimlib @("pwsh", "-File", ".\mock_wimlib.ps1")
+          Invoke-Wimlib -FilePath "pwsh" -Arguments @("-File", ".\mock_wimlib.ps1")
 
           Remove-Item ".\mock_wimlib.ps1" -ErrorAction SilentlyContinue
 

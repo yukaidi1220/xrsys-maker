@@ -21,7 +21,67 @@ param(
 $ErrorActionPreference = 'Stop'
 $Server = "https://list.xrgzs.top"
 
-# 监控函数：输出系统状态
+# wimlib 日志限速输出函数
+function Invoke-Wimlib {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments
+    )
+
+    $rateLimitedPatterns = @(
+        'Creating files',
+        'Extracting file data',
+        'Applying metadata to files',
+        'MiB scanned',
+        'Archiving file data'
+    )
+
+    $lastOutputTime = [DateTime]::MinValue
+    $logFile = ".\wimlib_temp.log"
+
+    $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru -NoNewWindow -RedirectStandardOutput $logFile
+
+    while (!$process.HasExited) {
+        Start-Sleep -Milliseconds 100
+        if (Test-Path $logFile) {
+            $lines = Get-Content $logFile -ErrorAction SilentlyContinue
+            foreach ($line in $lines) {
+                $shouldRateLimit = $false
+                foreach ($pattern in $rateLimitedPatterns) {
+                    if ($line -match [regex]::Escape($pattern)) {
+                        $shouldRateLimit = $true
+                        break
+                    }
+                }
+
+                if ($shouldRateLimit) {
+                    $now = [DateTime]::UtcNow
+                    if (($now - $lastOutputTime).TotalSeconds -ge 15) {
+                        Write-Host $line
+                        $lastOutputTime = $now
+                    }
+                } else {
+                    Write-Host $line
+                }
+            }
+            Clear-Content $logFile -ErrorAction SilentlyContinue
+        }
+    }
+
+    # 输出剩余内容
+    if (Test-Path $logFile) {
+        $remaining = Get-Content $logFile -ErrorAction SilentlyContinue
+        foreach ($line in $remaining) { Write-Host $line }
+        Remove-Item $logFile -ErrorAction SilentlyContinue
+    }
+
+    return $process.ExitCode
+}
+
+# 计时器
+$script:StepTimers = @{}
+
+# 监控函数：输出系统状态和耗时
 function Write-Status {
     param(
         [string]$Step,
@@ -39,9 +99,19 @@ function Write-Status {
     $cFree = if ($cDrive) { [math]::Round($cDrive.SizeRemaining / 1GB, 2) } else { "N/A" }
     $dFree = if ($dDrive) { [math]::Round($dDrive.SizeRemaining / 1GB, 2) } else { "N/A" }
 
+    # 计时逻辑
+    $duration = ""
+    if ($Status -eq "开始") {
+        $script:StepTimers[$Step] = [DateTime]::UtcNow
+    } elseif ($Status -eq "完成" -and $script:StepTimers.ContainsKey($Step)) {
+        $elapsed = [DateTime]::UtcNow - $script:StepTimers[$Step]
+        $duration = " | 耗时: {0:hh\:mm\:ss}" -f $elapsed
+        $script:StepTimers.Remove($Step)
+    }
+
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "[$time] $Step - $Status" -ForegroundColor Yellow
+    Write-Host "[$time] $Step - $Status$duration" -ForegroundColor Yellow
     Write-Host "内存: ${usedMem}/${totalMem} GB (${memPercent}%)" -ForegroundColor White
     Write-Host "C盘可用: ${cFree} GB | D盘可用: ${dFree} GB" -ForegroundColor White
     Write-Host "========================================" -ForegroundColor Cyan
@@ -557,7 +627,7 @@ Write-Status -Step "创建虚拟磁盘" -Status "完成"
 # extract imagefile use wimlib-imagex
 Write-Host "Extracting $osFile, please wait..."
 Write-Status -Step "释放镜像(wimlib apply)" -Status "开始"
-.\bin\wimlib-imagex.exe apply "$osFile" $osIndex "$mountDir"
+Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("apply", "$osFile", $osIndex, "$mountDir")
 Write-Status -Step "释放镜像(wimlib apply)" -Status "完成"
 # inject deploy
 Write-Status -Step "注入部署文件" -Status "开始"
@@ -724,7 +794,7 @@ ${sysver}_${sysdate}
 # Write-Host "Packing $sysFile.wim, please wait..."
 # New-WindowsImage -ImagePath ".\$sysFile.wim" -CapturePath "$mountDir" -Name $sysVer -Description $sysVerCN
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "开始"
-.\bin\wimlib-imagex.exe capture "$mountDir" "$sysFile.esd" "$sysVer" "$sysVerCN" --solid --compress=lzms:100 --threads=4 --solid-chunk-size=128M --image-property "DISPLAYNAME=$sysVer" --image-property "DISPLAYDESCRIPTION=$sysVerCN"
+Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("capture", "$mountDir", "$sysFile.esd", "$sysVer", "$sysVerCN", "--solid", "--compress=lzms:100", "--threads=4", "--solid-chunk-size=128M", "--image-property", "DISPLAYNAME=$sysVer", "--image-property", "DISPLAYDESCRIPTION=$sysVerCN")
 if ($?) { Write-Host "Capture Successfully!" } else { Write-Error "Capture Failed!" }
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "完成"
 
