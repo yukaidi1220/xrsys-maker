@@ -190,7 +190,6 @@ jobs:
           # 创建测试 BAT 文件（UTF-8 编码，CR+LF）
           $lines = @(
             '@echo off'
-            'chcp 65001 >nul'
             'echo === 测试中文输出 ==='
             'echo 这是第一行中文'
             'echo 正在处理文件...'
