@@ -33,17 +33,29 @@ jobs:
             }
           }
 
-      - name: 查看CPU信息
+      - name: 查看CPU详细信息
         shell: pwsh
         run: |
-          Write-Host "=== CPU信息 ==="
+          Write-Host "=== CPU 信息 ==="
           $cpu = Get-CimInstance Win32_Processor
           Write-Host "型号: $($cpu.Name)"
+          Write-Host "制造商: $($cpu.Manufacturer)"
           Write-Host "核心数: $($cpu.NumberOfCores)"
           Write-Host "逻辑处理器数: $($cpu.NumberOfLogicalProcessors)"
           Write-Host "最大时钟速度: $($cpu.MaxClockSpeed) MHz"
+          Write-Host "当前时钟速度: $($cpu.CurrentClockSpeed) MHz"
+          Write-Host "L2 缓存: $($cpu.L2CacheSize) KB"
+          Write-Host "L3 缓存: $($cpu.L3CacheSize) KB"
+          Write-Host "架构: $($cpu.Architecture)"
 
-      - name: 查看内存信息
+          Write-Host ""
+          Write-Host "=== CPU 缓存详细信息 ==="
+          Get-CimInstance Win32_CacheMemory | ForEach-Object {
+            $level = switch($_.Level) { 2 {"L2"} 3 {"L3"} default {"L$($_.Level)"} }
+            Write-Host "$level: $([math]::Round($_.MaxCacheSize/1024,2)) MB ($($_.NumberOfBlocks) blocks)"
+          }
+
+      - name: 查看内存详细信息
         shell: pwsh
         run: |
           Write-Host "=== 内存信息 ==="
@@ -51,8 +63,28 @@ jobs:
           $totalGB = [math]::Round(($mem | Measure-Object -Property Capacity -Sum).Sum/1GB, 2)
           Write-Host "总内存: $totalGB GB"
           Write-Host "内存条数量: $($mem.Count)"
+          Write-Host ""
+          Write-Host "=== 内存条详细信息 ==="
           $mem | ForEach-Object {
-            Write-Host "  $($_.DeviceLocator): $([math]::Round($_.Capacity/1GB,2))GB $($_.Speed)MHz"
+            $speed = if ($_.Speed) { "$($_.Speed) MHz" } else { "未知" }
+            $type = switch($_.SMBIOSMemoryType) { 20 {"DDR"} 21 {"DDR2"} 24 {"DDR3"} 26 {"DDR4"} 34 {"DDR5"} default {"未知($($_.SMBIOSMemoryType))"} }
+            Write-Host "  $($_.DeviceLocator):"
+            Write-Host "    容量: $([math]::Round($_.Capacity/1GB,2)) GB"
+            Write-Host "    类型: $type"
+            Write-Host "    速度: $speed"
+            Write-Host "    制造商: $($_.Manufacturer)"
+            Write-Host "    序列号: $($_.SerialNumber)"
+            Write-Host "    位置: $($_.BankLabel)"
+          }
+
+          Write-Host ""
+          Write-Host "=== 内存时序信息 ==="
+          # 尝试通过 WMI 获取内存时序
+          $memConfig = Get-CimInstance -Namespace "root\wmi" -ClassName "MSMSSmBios_RawSMBiosTables" -ErrorAction SilentlyContinue
+          if ($memConfig) {
+            Write-Host "SMBIOS 数据可用，但解析需要额外工具"
+          } else {
+            Write-Host "内存时序信息需要专用工具（如 CPU-Z）获取"
           }
 
       - name: 安装并运行速度测试
