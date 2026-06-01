@@ -39,14 +39,19 @@ function Invoke-Wimlib {
     $lastOutputTime = [DateTime]::MinValue
     $lastMonitorTime = [DateTime]::MinValue
     $logFile = ".\wimlib_temp.log"
+    $readPosition = 0
 
     $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru -NoNewWindow -RedirectStandardOutput $logFile
 
     while (!$process.HasExited) {
         Start-Sleep -Milliseconds 100
         if (Test-Path $logFile) {
-            $lines = Get-Content $logFile -ErrorAction SilentlyContinue
-            foreach ($line in $lines) {
+            $stream = [System.IO.File]::Open($logFile, 'Open', 'Read', 'ReadWrite')
+            $reader = New-Object System.IO.StreamReader($stream)
+            $stream.Seek($readPosition, 'Begin') | Out-Null
+
+            while ($null -ne ($line = $reader.ReadLine())) {
+                $readPosition = $stream.Position
                 $shouldRateLimit = $false
                 foreach ($pattern in $rateLimitedPatterns) {
                     if ($line -match [regex]::Escape($pattern)) {
@@ -65,7 +70,9 @@ function Invoke-Wimlib {
                     Write-Host $line
                 }
             }
-            Clear-Content $logFile -ErrorAction SilentlyContinue
+
+            $reader.Close()
+            $stream.Close()
         }
 
         # 每30秒输出 CPU 和内存占用
@@ -84,8 +91,14 @@ function Invoke-Wimlib {
 
     # 输出剩余内容
     if (Test-Path $logFile) {
-        $remaining = Get-Content $logFile -ErrorAction SilentlyContinue
-        foreach ($line in $remaining) { Write-Host $line }
+        $stream = [System.IO.File]::Open($logFile, 'Open', 'Read', 'ReadWrite')
+        $reader = New-Object System.IO.StreamReader($stream)
+        $stream.Seek($readPosition, 'Begin') | Out-Null
+        while ($null -ne ($line = $reader.ReadLine())) {
+            Write-Host $line
+        }
+        $reader.Close()
+        $stream.Close()
         Remove-Item $logFile -ErrorAction SilentlyContinue
     }
 
