@@ -116,16 +116,6 @@ jobs:
             "SpeechRuntime",     # 语音运行时
             "YourPhone",         # Your Phone
             "PhoneExperienceHost",
-            "explorer",          # 资源管理器
-            "dwm",               # 桌面窗口管理器
-            "sihost",            # Shell Infrastructure Host
-            "ctfmon",            # 输入法
-            "RuntimeBroker",     # Runtime Broker
-            "ShellHost",         # Shell Host
-            "taskhostw",         # Task Host
-            "TabTip",            # 触摸键盘
-            "InputApp",          # 输入应用
-            "ShellExperienceHost", # Shell Experience Host
             "SearchApp",         # 搜索应用
             "SearchIndexer",     # 搜索索引
             "WerFault",          # Windows 错误报告
@@ -134,9 +124,7 @@ jobs:
             "MpCmdRun",          # Defender 命令行
             "MsMpEngCP",         # Defender CPU 保护
             "docker",            # Docker
-            "containerd",        # Containerd
-            "conhost",           # 控制台窗口宿主
-            "OpenConsole"        # 新版控制台
+            "containerd"         # Containerd
           )
 
           foreach ($proc in $processesToStop) {
