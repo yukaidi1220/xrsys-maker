@@ -1,0 +1,65 @@
+name: 系统环境探测
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - name: 查看分区信息
+        shell: pwsh
+        run: |
+          Write-Host "=== 分区信息 ==="
+          Get-Volume | Where-Object { $_.DriveLetter } |
+            Format-Table DriveLetter, FileSystemLabel, FileSystem, @{N='大小GB';E={[math]::Round($_.Size/1GB,2)}}, @{N='可用空间GB';E={[math]::Round($_.SizeRemaining/1GB,2)}} -AutoSize
+
+      - name: 查看磁盘信息
+        shell: pwsh
+        run: |
+          Write-Host "=== 物理磁盘信息 ==="
+          Get-PhysicalDisk |
+            Format-Table DeviceId, FriendlyName, MediaType, BusType, @{N='大小GB';E={[math]::Round($_.Size/1GB,2)}} -AutoSize
+          Write-Host ""
+          Write-Host "=== 磁盘分区信息 ==="
+          Get-Disk | ForEach-Object {
+            $disk = $_
+            Write-Host "磁盘 $($disk.Number): $($disk.FriendlyName) ($($disk.PartitionStyle))"
+            Get-Partition -DiskNumber $disk.Number | ForEach-Object {
+              $vol = Get-Volume -Partition $_ -ErrorAction SilentlyContinue
+              if ($vol) {
+                Write-Host "  分区 $($_.PartitionNumber): 盘符=$($vol.DriveLetter) 大小=$([math]::Round($_.Size/1GB,2))GB 可用=$([math]::Round($vol.SizeRemaining/1GB,2))GB"
+              }
+            }
+          }
+
+      - name: 查看CPU信息
+        shell: pwsh
+        run: |
+          Write-Host "=== CPU信息 ==="
+          $cpu = Get-CimInstance Win32_Processor
+          Write-Host "型号: $($cpu.Name)"
+          Write-Host "核心数: $($cpu.NumberOfCores)"
+          Write-Host "逻辑处理器数: $($cpu.NumberOfLogicalProcessors)"
+          Write-Host "最大时钟速度: $($cpu.MaxClockSpeed) MHz"
+
+      - name: 查看内存信息
+        shell: pwsh
+        run: |
+          Write-Host "=== 内存信息 ==="
+          $mem = Get-CimInstance Win32_PhysicalMemory
+          $totalGB = [math]::Round(($mem | Measure-Object -Property Capacity -Sum).Sum/1GB, 2)
+          Write-Host "总内存: $totalGB GB"
+          Write-Host "内存条数量: $($mem.Count)"
+          $mem | ForEach-Object {
+            Write-Host "  $($_.DeviceLocator): $([math]::Round($_.Capacity/1GB,2))GB $($_.Speed)MHz"
+          }
+
+      - name: 安装并运行速度测试
+        shell: pwsh
+        run: |
+          Write-Host "=== 安装 speedtest-cli ==="
+          choco install speedtest-cli -y
+          Write-Host ""
+          Write-Host "=== 网络速度测试 ==="
+          speedtest --accept-license --accept-gdpr
