@@ -187,17 +187,11 @@ jobs:
       - name: 测试 BAT 中文编码
         shell: pwsh
         run: |
-          # 创建测试 BAT 文件
-          $batContent = @'
-          @echo off
-          echo === 测试中文输出 ===
-          echo 这是第一行中文
-          echo 正在处理文件...
-          echo 完成！
-          echo === 测试结束 ===
-          '@
+          # 创建测试 BAT 文件（GBK 编码，CR+LF）
+          $batContent = "@echo off`r`necho === 测试中文输出 ===`r`necho 这是第一行中文`r`necho 正在处理文件...`r`necho 完成！`r`necho === 测试结束 ==="
 
-          Set-Content -Path ".\test.bat" -Value $batContent -Encoding ASCII
+          # 使用 Default 编码（Windows 上是 GBK）
+          [System.IO.File]::WriteAllText(".\test.bat", $batContent, [System.Text.Encoding]::Default)
 
           Write-Host "=== 测试 cmd.exe 调用 BAT 中文输出 ==="
           Write-Host ""
