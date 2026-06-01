@@ -665,7 +665,8 @@ if ($sysArch -eq "arm64") {
     Invoke-WebRequest "https://c.xrgzs.top/unattend/arm64.xml" -OutFile ".\unattend.xml"
 }
 Copy-Item -Path ".\unattend.xml" -Destination "$mountDir" -Force
-& "$mountDir\injectdeploy.bat" /S
+# & "$mountDir\injectdeploy.bat" /S
+cmd.exe /c "$mountDir\injectdeploy.bat" /S
 if ($?) { Write-Host "Inject Deploy Successfully!" } else { Write-Error "Inject Deploy Failed!" }
 Remove-Item -Path "$mountDir\injectdeploy.bat" -ErrorAction SilentlyContinue
 Write-Status -Step "注入部署文件" -Status "完成"
