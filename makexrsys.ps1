@@ -32,7 +32,7 @@ function Invoke-Wimlib {
         'Creating files',
         'Extracting file data',
         'Applying metadata to files',
-        'MiB scanned',
+        'iB scanned',
         'Archiving file data'
     )
 
@@ -666,7 +666,10 @@ if ($sysArch -eq "arm64") {
 }
 Copy-Item -Path ".\unattend.xml" -Destination "$mountDir" -Force
 # & "$mountDir\injectdeploy.bat" /S
+$originalEncoding = [Console]::OutputEncoding
+[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding('GBK')
 cmd.exe /c "$mountDir\injectdeploy.bat" /S
+[Console]::OutputEncoding = $originalEncoding
 if ($?) { Write-Host "Inject Deploy Successfully!" } else { Write-Error "Inject Deploy Failed!" }
 Remove-Item -Path "$mountDir\injectdeploy.bat" -ErrorAction SilentlyContinue
 Write-Status -Step "注入部署文件" -Status "完成"
