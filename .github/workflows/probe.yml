@@ -184,6 +184,41 @@ jobs:
 
           Remove-Item ".\mock_wimlib.ps1" -ErrorAction SilentlyContinue
 
+      - name: 测试 BAT 中文编码
+        shell: pwsh
+        run: |
+          # 创建测试 BAT 文件
+          $batContent = @'
+          @echo off
+          echo === 测试中文输出 ===
+          echo 这是第一行中文
+          echo 正在处理文件...
+          echo 完成！
+          echo === 测试结束 ===
+          '@
+
+          Set-Content -Path ".\test.bat" -Value $batContent -Encoding ASCII
+
+          Write-Host "=== 测试 cmd.exe 调用 BAT 中文输出 ==="
+          Write-Host ""
+
+          # 保存原编码
+          $originalEncoding = [Console]::OutputEncoding
+
+          # 设置 GBK 编码
+          [Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding('GBK')
+
+          # 调用 BAT
+          cmd.exe /c ".\test.bat"
+
+          # 恢复原编码
+          [Console]::OutputEncoding = $originalEncoding
+
+          Write-Host ""
+          Write-Host "=== 测试完成 ==="
+
+          Remove-Item ".\test.bat" -ErrorAction SilentlyContinue
+
       - name: 查看网络信息
         shell: pwsh
         run: |
