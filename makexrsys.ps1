@@ -637,12 +637,12 @@ if ($?) { Write-Host "Capture Successfully!" } else { Write-Error "Capture Faile
 
 # clean up mount dir
 # Dismount-DiskImage -Path "$mountDir" -Discard
-@"
-SELECT VDISK FILE="$vhdfile"
-DETACH VDISK
-"@  | diskpart.exe
-if ($?) { Write-Host "Clean Up Successfully!" } else { Write-Error "Clean Up Failed!" }
-Remove-Item $vhdfile -Force -ErrorAction SilentlyContinue
+# @"
+# SELECT VDISK FILE="$vhdfile"
+# DETACH VDISK
+# "@  | diskpart.exe
+# if ($?) { Write-Host "Clean Up Successfully!" } else { Write-Error "Clean Up Failed!" }
+# Remove-Item $vhdfile -Force -ErrorAction SilentlyContinue
 
 # convert to esd
 # .\bin\wimlib-imagex.exe export "$sysFile.wim" all "$sysFile.esd" --solid
