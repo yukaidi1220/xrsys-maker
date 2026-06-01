@@ -206,17 +206,8 @@ jobs:
           Write-Host "=== 测试 cmd.exe 调用 BAT 中文输出 ==="
           Write-Host ""
 
-          # 调用 BAT（cmd.exe 会输出 GBK）
-          $output = cmd.exe /c ".\test.bat" 2>&1
-
-          # 用 GBK 解码输出
-          foreach ($line in $output) {
-            if ($line -is [byte[]]) {
-              Write-Host $gbk.GetString($line)
-            } else {
-              Write-Host $line
-            }
-          }
+          # 用 Start-Process 让 cmd.exe 直接输出到控制台
+          Start-Process -FilePath "cmd.exe" -ArgumentList "/c .\test.bat" -Wait -NoNewWindow
 
           Write-Host ""
           Write-Host "=== 测试完成 ==="
