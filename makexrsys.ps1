@@ -25,6 +25,7 @@ $Driver_URL = "$Server/d/pxy/System/Driver"
 $Tools_URL = "$Server/d/pxy/Xiaoran%20Studio/Tools"
 $Software_URL = "$Server/d/pxy/Software"
 $OSC_URL = "$Server/d/pxy/Xiaoran%20Studio/Onekey/Config/osc.exe"
+$rclone_build_point = "zhipin:/Share/Xiaoran Studio/System"
 
 # wimlib 日志限速输出函数
 function Invoke-Wimlib {
@@ -929,12 +930,12 @@ Write-Status -Step "生成文件校验和" -Status "完成"
 
 # Publish image
 Write-Status -Step "上传镜像到网盘" -Status "开始"
-.\bin\rclone.exe copy "$sysFile.esd" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress --onedrive-chunk-size 250M
+.\bin\rclone.exe copy "$sysFile.esd" "$rclone_build_point/Nightly/$sysDate" --progress --onedrive-chunk-size 250M
 if ($?) { Write-Host "上传成功！" } else { Write-Error "上传失败！" }
-.\bin\rclone.exe copy "$sysFile.json" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysDate" --progress
+.\bin\rclone.exe copy "$sysFile.json" "$rclone_build_point/Nightly/$sysDate" --progress
 # Set latest
 if ($Latest) {
-    .\bin\rclone.exe copyto "$sysFile.json" "zhipin:/Share/Xiaoran Studio/System/Nightly/$sysVer.json" --progress
+    .\bin\rclone.exe copyto "$sysFile.json" "$rclone_build_point/Nightly/$sysVer.json" --progress
 }
 Write-Status -Step "上传镜像到网盘" -Status "完成"
 Write-Status -Step "全部完成" -Status "成功"
