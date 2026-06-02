@@ -63,11 +63,11 @@ function Invoke-Wimlib {
                 if ($shouldRateLimit) {
                     $now = [DateTime]::UtcNow
                     if (($now - $lastOutputTime).TotalSeconds -ge 15) {
-                        Write-Host $line
+                        if ($line) { Write-Host $line }
                         $lastOutputTime = $now
                     }
                 } else {
-                    Write-Host $line
+                    if ($line) { Write-Host $line }
                 }
             }
 
@@ -95,7 +95,7 @@ function Invoke-Wimlib {
         $reader = New-Object System.IO.StreamReader($stream)
         $stream.Seek($readPosition, 'Begin') | Out-Null
         while ($null -ne ($line = $reader.ReadLine())) {
-            Write-Host $line
+            if ($line) { Write-Host $line }
         }
         $reader.Close()
         $stream.Close()
@@ -130,7 +130,7 @@ function Write-Status {
     $duration = ""
     if ($Status -eq "开始") {
         $script:StepTimers[$Step] = [DateTime]::UtcNow
-    } elseif ($Status -eq "完成" -and $script:StepTimers.ContainsKey($Step)) {
+    } elseif (($Status -eq "完成" -or $Status -eq "结束") -and $script:StepTimers.ContainsKey($Step)) {
         $elapsed = [DateTime]::UtcNow - $script:StepTimers[$Step]
         $duration = " | 耗时: {0:hh\:mm\:ss}" -f $elapsed
         $script:StepTimers.Remove($Step)
@@ -687,7 +687,10 @@ $isopath = Resolve-Path -Path ".\temp\drivers.iso"
 # Dismount-DiskImage -ImagePath $isopath 
 ."C:\Program Files\7-Zip\7z.exe" x -r -y ".\temp\drivers.iso" -o"$mountDir\Windows\WinDrive"
 Remove-Item -Path $isopath -ErrorAction SilentlyContinue 
+Write-Status -Step "下载并添加驱动" -Status "完成"
 
+
+Write-Status -Step "下载并添加软件包" -Status "开始"
 # add software pack
 if ([int]$osVer -ge 10) {
     # add pwsh runtime Windows 10+
@@ -744,56 +747,61 @@ if ([float]$osVersion -ge 27965.0) {
 Invoke-Aria2Download -Uri "$Server/d/pxy/Xiaoran%20Studio/Tools/Tools.exe" -Destination "$mountDir\Windows\Setup\Set\Run" -Name "常用工具.exe" -Big
 Invoke-Aria2Download -Uri "$Server/d/pxy/Xiaoran%20Studio/Tools/Office2016%E5%AD%97%E4%BD%93.exe" -Destination "$mountDir\Windows\Setup\Set\Run" -Name "办公字体.exe" -Big
 Invoke-Aria2Download -Uri "$Server/d/pxy/Xiaoran%20Studio/Tools/Soft/Bandizip.exe" -Destination "$mountDir\Windows\Setup\Set\Run" -Name "Bandizip.exe" -Big
+Write-Status -Step "下载并添加软件包" -Status "完成"
 
+Write-Status -Step "处理预装Appx" -Status "开始"
 # remove preinstalled appx
 if ([int]$osVer -ge 10) {
-    $preinstalled = Get-AppxProvisionedPackage -Path "$mountDir"
-    foreach ($appName in @(
-            'clipchamp.clipchamp',
-            'Microsoft.549981C3F5F10',
-            'microsoft.microsoftteams',
-            'microsoft.skypeapp',
-            'microsoft.todos',
-            'microsoft.bingnews',
-            'microsoft.bingweather',
-            'microsoft.bingsearch',
-            'microsoft.windowscommunicationsapps',
-            'microsoft.gethelp',
-            'microsoft.getstarted',
-            'microsoft.microsoft3dviewer',
-            'microsoft.microsoftofficehub',
-            'microsoft.copilot',
-            'microsoft.microsoftsolitairecollection',
-            'microsoft.microsoftstickynotes',
-            'microsoft.mixedreality.portal',
-            'microsoft.mspaint',
-            'microsoft.office.onenote',
-            'microsoft.OutlookForWindows',
-            'microsoft.people',
-            'microsoft.powerautomatedesktop',
-            'microsoft.windowsfeedbackhub',
-            'Microsoft.StartExperiencesApp',
-            'microsoft.windowsmaps',
-            'microsoft.yourphone',
-            'microsoft.zunemusic',
-            'microsoft.zunevideo',
-            'microsoft.xboxapp',
-            'Microsoft.Wallet',
-            'MicrosoftCorporationII.MicrosoftFamily',
-            'MicrosoftTeams',
-            'MicrosoftWindows.Client.WebExperience',
-            'Microsoft.WidgetsPlatformRuntime',
-            'Microsoft.Windows.DevHome',
-            'MSTeams',
-            'Microsoft.XboxGamingOverlay',
-            'Microsoft.XboxSpeechToTextOverlay',
-            'Microsoft.XboxIdentityProvider',
-            'Microsoft.Xbox.TCUI'
-        )) {
-        $preinstalled | 
-        Where-Object { $_.packagename -like "*$appName*" } | 
-        Remove-AppxProvisionedPackage -Path "$mountDir" -ErrorAction SilentlyContinue 
-    }
+    # 单次过滤 + 管道移除，避免 37 次独立 DISM 操作和重复过滤
+    $appPatterns = @(
+        'clipchamp.clipchamp',
+        'Microsoft.549981C3F5F10',
+        'microsoft.microsoftteams',
+        'microsoft.skypeapp',
+        'microsoft.todos',
+        'microsoft.bingnews',
+        'microsoft.bingweather',
+        'microsoft.bingsearch',
+        'microsoft.windowscommunicationsapps',
+        'microsoft.gethelp',
+        'microsoft.getstarted',
+        'microsoft.microsoft3dviewer',
+        'microsoft.microsoftofficehub',
+        'microsoft.copilot',
+        'microsoft.microsoftsolitairecollection',
+        'microsoft.microsoftstickynotes',
+        'microsoft.mixedreality.portal',
+        'microsoft.mspaint',
+        'microsoft.office.onenote',
+        'microsoft.OutlookForWindows',
+        'microsoft.people',
+        'microsoft.powerautomatedesktop',
+        'microsoft.windowsfeedbackhub',
+        'Microsoft.StartExperiencesApp',
+        'microsoft.windowsmaps',
+        'microsoft.yourphone',
+        'microsoft.zunemusic',
+        'microsoft.zunevideo',
+        'microsoft.xboxapp',
+        'Microsoft.Wallet',
+        'MicrosoftCorporationII.MicrosoftFamily',
+        'MicrosoftTeams',
+        'MicrosoftWindows.Client.WebExperience',
+        'Microsoft.WidgetsPlatformRuntime',
+        'Microsoft.Windows.DevHome',
+        'MSTeams',
+        'Microsoft.XboxGamingOverlay',
+        'Microsoft.XboxSpeechToTextOverlay',
+        'Microsoft.XboxIdentityProvider',
+        'Microsoft.Xbox.TCUI'
+    )
+    Get-AppxProvisionedPackage -Path "$mountDir" |
+        Where-Object {
+            $pkg = $_.PackageName.ToLower()
+            foreach ($pat in $appPatterns) { if ($pkg -like "*$($pat.ToLower())*") { return $true } }
+            return $false
+        } |
+        Remove-AppxProvisionedPackage -Path "$mountDir" -ErrorAction SilentlyContinue
     # disable default wd
     Get-WindowsOptionalFeature -Path "$mountDir" | Where-Object { $_.FeatureName -like "*Defender*" } | Disable-WindowsOptionalFeature
 
@@ -818,6 +826,7 @@ if ([int]$osVer -ge 10) {
         Write-Host "未找到 Defender Sense Client，跳过..."
     }
 }
+Write-Status -Step "处理预装Appx" -Status "完成"
 
 # write version
 "${sysvercn}_${sysdate} 
@@ -828,7 +837,7 @@ ${sysver}_${sysdate}
 # Write-Host "Packing $sysFile.wim, please wait..."
 # New-WindowsImage -ImagePath ".\$sysFile.wim" -CapturePath "$mountDir" -Name $sysVer -Description $sysVerCN
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "开始"
-Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("capture", "$mountDir", "$sysFile.esd", "$sysVer", "$sysVerCN", "--solid", "--compress=lzms:20", "--threads=6", "--solid-chunk-size=128M", "--image-property", "DISPLAYNAME=$sysVer", "--image-property", "DISPLAYDESCRIPTION=$sysVerCN")
+Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("capture", "$mountDir", "$sysFile.esd", "$sysVer", "$sysVerCN", "--solid", "--compress=lzms:34", "--threads=6", "--solid-chunk-size=128M", "--image-property", "DISPLAYNAME=$sysVer", "--image-property", "DISPLAYDESCRIPTION=$sysVerCN")
 if ($?) { Write-Host "镜像捕获成功！" } else { Write-Error "镜像捕获失败！" }
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "完成"
 
@@ -885,8 +894,9 @@ $stream.Close(); $md5.Dispose(); $sha256.Dispose()
         "file"    = $osFile
         "index"   = $osIndex
     }
-} | ConvertTo-Json | Out-File -FilePath ".\$sysFile.json" -Encoding utf8
-Write-Status -Step "生成文件校验和" -Status "结束"
+} | ConvertTo-Json -OutVariable jsonContent | Out-File -FilePath ".\$sysFile.json" -Encoding utf8
+Write-Host $jsonContent
+Write-Status -Step "生成文件校验和" -Status "完成"
 
 # Publish image
 Write-Status -Step "上传镜像到网盘" -Status "开始"
