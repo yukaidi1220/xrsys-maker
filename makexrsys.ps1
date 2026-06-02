@@ -40,26 +40,25 @@ function Invoke-Wimlib {
     $lastMonitorTime = [DateTime]::MinValue
     $logFile = ".\wimlib_temp.log"
     $readPosition = 0
+    $errPosition = 0
+    $errFile = ".\wimlib_err.log"
 
-    $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru -NoNewWindow -RedirectStandardOutput $logFile
+    $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru -NoNewWindow -RedirectStandardOutput $logFile -RedirectStandardError $errFile
 
     while (!$process.HasExited) {
         Start-Sleep -Milliseconds 100
+
+        # 读取 stdout
         if (Test-Path $logFile) {
             $stream = [System.IO.File]::Open($logFile, 'Open', 'Read', 'ReadWrite')
             $reader = New-Object System.IO.StreamReader($stream)
             $stream.Seek($readPosition, 'Begin') | Out-Null
-
             while ($null -ne ($line = $reader.ReadLine())) {
                 $readPosition = $stream.Position
                 $shouldRateLimit = $false
                 foreach ($pattern in $rateLimitedPatterns) {
-                    if ($line -match [regex]::Escape($pattern)) {
-                        $shouldRateLimit = $true
-                        break
-                    }
+                    if ($line -match [regex]::Escape($pattern)) { $shouldRateLimit = $true; break }
                 }
-
                 if ($shouldRateLimit) {
                     $now = [DateTime]::UtcNow
                     if (($now - $lastOutputTime).TotalSeconds -ge 15) {
@@ -70,9 +69,21 @@ function Invoke-Wimlib {
                     if ($line) { Write-Host $line }
                 }
             }
+            $reader.Close(); $stream.Close()
+        }
 
-            $reader.Close()
-            $stream.Close()
+        # 读取 stderr（只在有实际错误信息时输出）
+        if (Test-Path $errFile) {
+            $stream = [System.IO.File]::Open($errFile, 'Open', 'Read', 'ReadWrite')
+            $reader = New-Object System.IO.StreamReader($stream)
+            $stream.Seek($errPosition, 'Begin') | Out-Null
+            while ($null -ne ($line = $reader.ReadLine())) {
+                $errPosition = $stream.Position
+                if ($line -and $line -notmatch '^\s*(Path|Online)\s+:\s') {
+                    Write-Host "[wimlib] $line" -ForegroundColor Yellow
+                }
+            }
+            $reader.Close(); $stream.Close()
         }
 
         # 每30秒输出 CPU 和内存占用
@@ -89,7 +100,7 @@ function Invoke-Wimlib {
         }
     }
 
-    # 输出剩余内容
+    # 输出剩余 stdout
     if (Test-Path $logFile) {
         $stream = [System.IO.File]::Open($logFile, 'Open', 'Read', 'ReadWrite')
         $reader = New-Object System.IO.StreamReader($stream)
@@ -97,9 +108,22 @@ function Invoke-Wimlib {
         while ($null -ne ($line = $reader.ReadLine())) {
             if ($line) { Write-Host $line }
         }
-        $reader.Close()
-        $stream.Close()
+        $reader.Close(); $stream.Close()
         Remove-Item $logFile -ErrorAction SilentlyContinue
+    }
+
+    # 输出剩余 stderr
+    if (Test-Path $errFile) {
+        $stream = [System.IO.File]::Open($errFile, 'Open', 'Read', 'ReadWrite')
+        $reader = New-Object System.IO.StreamReader($stream)
+        $stream.Seek($errPosition, 'Begin') | Out-Null
+        while ($null -ne ($line = $reader.ReadLine())) {
+            if ($line -and $line -notmatch '^\s*(Path|Online)\s+:\s') {
+                Write-Host "[wimlib] $line" -ForegroundColor Yellow
+            }
+        }
+        $reader.Close(); $stream.Close()
+        Remove-Item $errFile -ErrorAction SilentlyContinue
     }
 
     return $process.ExitCode
