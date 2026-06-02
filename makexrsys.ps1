@@ -20,6 +20,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Server = "https://list.xrgzs.top"
+$MSUpdate_URL = "$Server/d/pxy/System/MSUpdate"
+$Driver_URL = "$Server/d/pxy/System/Driver"
+$Tools_URL = "$Server/d/pxy/Xiaoran%20Studio/Tools"
+$Software_URL = "$Server/d/pxy/Software"
+$OSC_URL = "$Server/d/pxy/Xiaoran%20Studio/Onekey/Config/osc.exe"
 
 # wimlib 日志限速输出函数
 function Invoke-Wimlib {
@@ -338,8 +343,8 @@ function Invoke-Aria2Download {
 # set original system info
 switch ($Target) {
     "w1126h1a64" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/11/26H1/latest_arm64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/11/26H1/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/26H1/latest_arm64.json"
+        $osUrl = "$MSUpdate_URL/11/26H1/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 4
@@ -350,8 +355,8 @@ switch ($Target) {
         $sysVerCN = "潇然系统_Win11_26H1_专业_ARM64_完整"
     }
     "w1126h164" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/11/26H1/latest_x64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/11/26H1/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/26H1/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/11/26H1/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 4
@@ -362,8 +367,8 @@ switch ($Target) {
         $sysVerCN = "潇然系统_Win11_26H1_专业_x64_完整"
     }
     "w1125h2a64" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/11/25H2/latest_arm64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/11/25H2/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/25H2/latest_arm64.json"
+        $osUrl = "$MSUpdate_URL/11/25H2/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 4
@@ -374,8 +379,8 @@ switch ($Target) {
         $sysVerCN = "潇然系统_Win11_25H2_专业_ARM64_完整"
     }
     "w1125h264" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/11/25H2/latest_x64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/11/25H2/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/25H2/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/11/25H2/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 4
@@ -386,8 +391,8 @@ switch ($Target) {
         $sysVerCN = "潇然系统_Win11_25H2_专业_x64_完整"
     }
     "w1123h2a64" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/11/23H2/latest_arm64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/11/23H2/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/23H2/latest_arm64.json"
+        $osUrl = "$MSUpdate_URL/11/23H2/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 4
@@ -401,8 +406,8 @@ switch ($Target) {
         # $obj = Get-OsBySearch -Path "/潇然工作室/System/Win11" -Search "MSUpdate_Win11_23H2*.esd"
         # $osUrl = $obj.osurl
         # $osFile = $obj.osfile
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/11/23H2/latest_x64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/11/23H2/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/23H2/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/11/23H2/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 4
@@ -416,8 +421,8 @@ switch ($Target) {
         # $obj = Get-OsBySearch -Path "/潇然工作室/System/Win10" -Search "MSUpdate_Win10_22H2*.esd"
         # $osUrl = $obj.osurl
         # $osFile = $obj.osfile
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/10/22H2/latest_x64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/10/22H2/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/22H2/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/10/22H2/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 4
@@ -428,8 +433,8 @@ switch ($Target) {
         $sysVerCN = "潇然系统_Win10_22H2_专业_x64_完整"
     }
     "w11lt2464" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/11/LTSC2024/latest_x64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/11/LTSC2024/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/LTSC2024/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/11/LTSC2024/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 1
@@ -440,8 +445,8 @@ switch ($Target) {
         $sysVerCN = "潇然系统_Win11_LTSC2024_企业S_x64_完整"
     }
     "w11lt24a64" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/11/LTSC2024/latest_arm64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/11/LTSC2024/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/LTSC2024/latest_arm64.json"
+        $osUrl = "$MSUpdate_URL/11/LTSC2024/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 1
@@ -452,8 +457,8 @@ switch ($Target) {
         $sysVerCN = "潇然系统_Win11_LTSC2024_企业S_ARM64_完整"
     }
     "w10lt2164" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/10/LTSC2021/latest_x64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/10/LTSC2021/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/LTSC2021/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/10/LTSC2021/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 1
@@ -464,8 +469,8 @@ switch ($Target) {
         $sysVerCN = "潇然系统_Win10_LTSC2021_企业S_x64_完整"
     }
     "w10lt1964" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/10/LTSC2019/latest_x64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/10/LTSC2019/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/LTSC2019/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/10/LTSC2019/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 1
@@ -476,8 +481,8 @@ switch ($Target) {
         $sysVerCN = "潇然系统_Win10_LTSC2019_企业S_x64_完整"
     }
     "w10lt1664" {
-        $obj = Invoke-RestMethod -Uri "$Server/d/pxy/System/MSUpdate/10/LTSB2016/latest_x64.json"
-        $osUrl = "$Server/d/pxy/System/MSUpdate/10/LTSB2016/" + $obj.os_version + '/' + $obj.name
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/LTSB2016/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/10/LTSB2016/" + $obj.os_version + '/' + $obj.name
         $osMd5 = $obj.hash.md5
         $osFile = $obj.name
         $osIndex = 1
@@ -508,16 +513,16 @@ switch ($Target) {
 if ($FullDrv) {
     if ($osArch -eq "x64" -and [float]$osVersion -ge 16299.0) {
         # DCH x64
-        $osdrvurl = "$Server/d/pxy/System/Driver/DrvCeo_Mod/Drvceo_Win10_Win11_x64_Lite.iso"
+        $osdrvurl = "$Driver_URL/DrvCeo_Mod/Drvceo_Win10_Win11_x64_Lite.iso"
     } elseif ($osArch -eq "x64" -and [float]$osVersion -ge 10240.0) {
         # noDCH x64
-        $osdrvurl = "$Server/d/pxy/System/Driver/DrvCeo_Mod/Drvceo_Win10_noDCH_x64_Lite.iso"
+        $osdrvurl = "$Driver_URL/DrvCeo_Mod/Drvceo_Win10_noDCH_x64_Lite.iso"
     } elseif ($osArch -eq "x64" -and [float]$osVersion -ge 7600.0) {
         # Win7 x64
-        $osdrvurl = "$Server/d/pxy/System/Driver/DrvCeo_Mod/Drvceo_Win7x64_Lite.iso"
+        $osdrvurl = "$Driver_URL/DrvCeo_Mod/Drvceo_Win7x64_Lite.iso"
     } elseif ($osArch -eq "x86" -and [float]$osVersion -ge 7600.0) {
         # Win7 x86
-        $osdrvurl = "$Server/d/pxy/System/Driver/DrvCeo_Mod/Drvceo_Win7x86_Lite.iso"
+        $osdrvurl = "$Driver_URL/DrvCeo_Mod/Drvceo_Win7x86_Lite.iso"
     } else {
         Write-Error "无法匹配相关驱动 ISO。"
     }
@@ -528,15 +533,15 @@ if ($FullDrv) {
 # dealosdriver
 if ($null -eq $osdrvurl) {
     if ($osArch -eq "x64" -and [float]$osVersion -ge 19041.0) {
-        $osdrvurl = "$Server/d/pxy/System/Driver/DP/NET/NET10x64.iso"
+        $osdrvurl = "$Driver_URL/DP/NET/NET10x64.iso"
     } elseif ($osArch -eq "arm64" -and [float]$osVersion -ge 19041.0) {
-        $osdrvurl = "$Server/d/pxy/System/Driver/DP/NET/NET10a64.iso"
+        $osdrvurl = "$Driver_URL/DP/NET/NET10a64.iso"
     } elseif ($osArch -eq "x64" -and [float]$osVersion -ge 10240.0) {
-        $osdrvurl = "$Server/d/pxy/System/Driver/DP/DPWin10x64.iso"
+        $osdrvurl = "$Driver_URL/DP/DPWin10x64.iso"
     } elseif ($osArch -eq "x64" -and [float]$osVersion -ge 7600.0) {
-        $osdrvurl = "$Server/d/pxy/System/Driver/DP/DPWin7x64.iso"
+        $osdrvurl = "$Driver_URL/DP/DPWin7x64.iso"
     } elseif ($osArch -eq "x86" -and [float]$osVersion -ge 7600.0) {
-        $osdrvurl = "$Server/d/pxy/System/Driver/DP/DPWin7x86.iso"
+        $osdrvurl = "$Driver_URL/DP/DPWin7x86.iso"
     } else {
         Write-Error "无法匹配相关驱动 ISO。"
     }
@@ -683,7 +688,7 @@ Write-Status -Step "释放镜像(wimlib apply)" -Status "完成"
 # inject deploy
 Write-Status -Step "注入部署文件" -Status "开始"
 Expand-Archive -Path ".\injectdeploy.zip" -DestinationPath "$mountDir" -Force
-Invoke-Aria2Download -Uri "$Server/d/pxy/Xiaoran%20Studio/Onekey/Config/osc.exe" -Destination $mountDir -Name "osc.exe"
+Invoke-Aria2Download -Uri "$OSC_URL" -Destination $mountDir -Name "osc.exe"
 Copy-Item -Path ".\injectdeploy.bat" -Destination "$mountDir" -Force
 if ($sysArch -eq "arm64") {
     Invoke-WebRequest "https://c.xrgzs.top/unattend/arm64.xml" -OutFile ".\unattend.xml"
@@ -751,13 +756,13 @@ if ([int]$osVer -ge 10) {
     }
 } else {
     # add edge runtime Windows 8.1-
-    Invoke-Aria2Download -Uri "$Server/d/pxy/Software/Edge/109/MicrosoftEdge_X64_109.0.1518.78_Stable.exe" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\Edge" -Name "MicrosoftEdge_X64_109.0.1518.78_Stable.exe" -Big
+    Invoke-Aria2Download -Uri "$Software_URL/Edge/109/MicrosoftEdge_X64_109.0.1518.78_Stable.exe" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\Edge" -Name "MicrosoftEdge_X64_109.0.1518.78_Stable.exe" -Big
     # add pwsh runtime Windows 8.1-
-    Invoke-Aria2Download -Uri "$Server/d/pxy/Software/PowerShell/PowerShell-7.2.24-win-x64.msi" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\PWSH" -Name "PowerShell-7.2.24-win-x64.msi" -Big
+    Invoke-Aria2Download -Uri "$Software_URL/PowerShell/PowerShell-7.2.24-win-x64.msi" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\PWSH" -Name "PowerShell-7.2.24-win-x64.msi" -Big
 }
 
 # add runtimes
-Invoke-Aria2Download -Uri "$Server/d/pxy/Xiaoran%20Studio/Tools/Soft/MSVCRedist.AIO.exe" -Destination "$mountDir\Windows\Setup\Set\osc\runtime" -Name "MSVCRedist.AIO.exe" -Big
+Invoke-Aria2Download -Uri "$Tools_URL/Soft/MSVCRedist.AIO.exe" -Destination "$mountDir\Windows\Setup\Set\osc\runtime" -Name "MSVCRedist.AIO.exe" -Big
 Invoke-Aria2Download -Uri "https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-$osArch.exe" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\DotNet" -Name "8.0-windowsdesktop-runtime-win-$osArch.exe" -Big
 if ([int]$osVer -ge 10) {
     Invoke-Aria2Download -Uri "https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-$osArch.exe" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\DotNet" -Name "10.0-windowsdesktop-runtime-win-$osArch.exe" -Big
@@ -768,9 +773,9 @@ if ([float]$osVersion -ge 27965.0) {
 }
 
 # add another softwares
-Invoke-Aria2Download -Uri "$Server/d/pxy/Xiaoran%20Studio/Tools/Tools.exe" -Destination "$mountDir\Windows\Setup\Set\Run" -Name "常用工具.exe" -Big
-Invoke-Aria2Download -Uri "$Server/d/pxy/Xiaoran%20Studio/Tools/Office2016%E5%AD%97%E4%BD%93.exe" -Destination "$mountDir\Windows\Setup\Set\Run" -Name "办公字体.exe" -Big
-Invoke-Aria2Download -Uri "$Server/d/pxy/Xiaoran%20Studio/Tools/Soft/Bandizip.exe" -Destination "$mountDir\Windows\Setup\Set\Run" -Name "Bandizip.exe" -Big
+Invoke-Aria2Download -Uri "$Tools_URL/Tools.exe" -Destination "$mountDir\Windows\Setup\Set\Run" -Name "常用工具.exe" -Big
+Invoke-Aria2Download -Uri "$Tools_URL/Office2016%E5%AD%97%E4%BD%93.exe" -Destination "$mountDir\Windows\Setup\Set\Run" -Name "办公字体.exe" -Big
+Invoke-Aria2Download -Uri "$Tools_URL/Soft/Bandizip.exe" -Destination "$mountDir\Windows\Setup\Set\Run" -Name "Bandizip.exe" -Big
 Write-Status -Step "下载并添加软件包" -Status "完成"
 
 Write-Status -Step "处理预装Appx" -Status "开始"
