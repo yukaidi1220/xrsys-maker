@@ -24,7 +24,7 @@ $MSUpdate_URL = "$Server/d/pxy/System/MSUpdate"
 $Driver_URL = "$Server/d/pxy/System/Driver"
 $Tools_URL = "$Server/d/pxy/Xiaoran%20Studio/Tools"
 $Software_URL = "$Server/d/pxy/Software"
-$OSC_URL = "$Server/d/pxy/Xiaoran%20Studio/Onekey/Config/osc.exe"
+$OSC_URL = "https://github.com/yukaidi1220/xrsys-maker/releases/download/OSC_URL/osc.exe"
 $rclone_build_point = "zhipin:/Share/System"
 
 # wimlib 日志限速输出函数
