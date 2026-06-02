@@ -253,42 +253,42 @@ function Invoke-Aria2Download {
     
     function Get-Aria2Error($exitcode) {
         $codes = @{
-            0  = 'All downloads were successful'
-            1  = 'An unknown error occurred'
-            2  = 'Timeout'
-            3  = 'Resource was not found'
-            4  = 'Aria2 saw the specified number of "resource not found" error. See --max-file-not-found option'
-            5  = 'Download aborted because download speed was too slow. See --lowest-speed-limit option'
-            6  = 'Network problem occurred.'
-            7  = 'There were unfinished downloads. This error is only reported if all finished downloads were successful and there were unfinished downloads in a queue when aria2 exited by pressing Ctrl-C by an user or sending TERM or INT signal'
-            8  = 'Remote server did not support resume when resume was required to complete download'
-            9  = 'There was not enough disk space available'
-            10 = 'Piece length was different from one in .aria2 control file. See --allow-piece-length-change option'
-            11 = 'Aria2 was downloading same file at that moment'
-            12 = 'Aria2 was downloading same info hash torrent at that moment'
-            13 = 'File already existed. See --allow-overwrite option'
-            14 = 'Renaming file failed. See --auto-file-renaming option'
-            15 = 'Aria2 could not open existing file'
-            16 = 'Aria2 could not create new file or truncate existing file'
-            17 = 'File I/O error occurred'
-            18 = 'Aria2 could not create directory'
-            19 = 'Name resolution failed'
-            20 = 'Aria2 could not parse Metalink document'
-            21 = 'FTP command failed'
-            22 = 'HTTP response header was bad or unexpected'
-            23 = 'Too many redirects occurred'
-            24 = 'HTTP authorization failed'
-            25 = 'Aria2 could not parse bencoded file (usually ".torrent" file)'
-            26 = '".torrent" file was corrupted or missing information that aria2 needed'
-            27 = 'Magnet URI was bad'
-            28 = 'Bad/unrecognized option was given or unexpected option argument was given'
-            29 = 'The remote server was unable to handle the request due to a temporary overloading or maintenance'
-            30 = 'Aria2 could not parse JSON-RPC request'
-            31 = 'Reserved. Not used'
-            32 = 'Checksum validation failed'
+            0  = '所有下载均已成功'
+            1  = '发生未知错误'
+            2  = '超时'
+            3  = '未找到资源'
+            4  = 'Aria2 遇到了指定数量的"资源未找到"错误。请参阅 --max-file-not-found 选项'
+            5  = '下载因速度过慢而中止。请参阅 --lowest-speed-limit 选项'
+            6  = '发生网络问题'
+            7  = '存在未完成的下载。此错误仅在所有已完成的下载均成功、且aria2因用户按下Ctrl-C或发送TERM/INT信号退出时队列中有未完成下载的情况下报告'
+            8  = '需要断点续传来完成下载，但远程服务器不支持断点续传'
+            9  = '磁盘空间不足'
+            10 = '分片长度与 .aria2 控制文件中的不一致。请参阅 --allow-piece-length-change 选项'
+            11 = 'Aria2 此时正在下载相同的文件'
+            12 = 'Aria2 此时正在下载相同 info hash 的种子文件'
+            13 = '文件已存在。请参阅 --allow-overwrite 选项'
+            14 = '文件重命名失败。请参阅 --auto-file-renaming 选项'
+            15 = 'Aria2 无法打开现有文件'
+            16 = 'Aria2 无法创建新文件或截断现有文件'
+            17 = '发生文件 I/O 错误'
+            18 = 'Aria2 无法创建目录'
+            19 = '名称解析失败'
+            20 = 'Aria2 无法解析 Metalink 文档'
+            21 = 'FTP 命令失败'
+            22 = 'HTTP 响应头异常或不符合预期'
+            23 = '重定向次数过多'
+            24 = 'HTTP 授权失败'
+            25 = 'Aria2 无法解析 bencoded 文件（通常是 ".torrent" 文件）'
+            26 = '".torrent" 文件已损坏或缺少 aria2 所需的信息'
+            27 = '磁力链接 URI 无效'
+            28 = '给出了无效/无法识别的选项或意外的选项参数'
+            29 = '远程服务器因临时过载或维护而无法处理请求'
+            30 = 'Aria2 无法解析 JSON-RPC 请求'
+            31 = '保留。未使用'
+            32 = '校验和验证失败'
         }
         if ($null -eq $codes[$exitcode]) {
-            return 'An unknown error occurred'
+            return '发生未知错误'
         }
         return $codes[$exitcode]
     }
@@ -331,7 +331,7 @@ function Invoke-Aria2Download {
     # handle aria2 error
     Write-Host ''
     if ($LASTEXITCODE -gt 0) {
-        Write-Error "Download failed! (Error $LASTEXITCODE) $(Get-Aria2Error $lastexitcode)"
+        Write-Error "下载失败！（错误 $LASTEXITCODE）$(Get-Aria2Error $lastexitcode)"
     }
 }
 
@@ -501,7 +501,7 @@ switch ($Target) {
         Invoke-WebRequest https://c.xrgzs.top/unattend/764bit.xml -OutFile .\unattend.xml
     }
     Default {
-        Write-Error "Unknown version."
+        Write-Error "未知版本。"
     }
 }
 
@@ -519,7 +519,7 @@ if ($FullDrv) {
         # Win7 x86
         $osdrvurl = "$Server/d/pxy/System/Driver/DrvCeo_Mod/Drvceo_Win7x86_Lite.iso"
     } else {
-        Write-Error "Cannot match related driver iso."
+        Write-Error "无法匹配相关驱动 ISO。"
     }
     $sysVer = $sysVer + "_DrvCeo"
     $sysVerCN = $sysVerCN + "_驱动总裁"
@@ -538,7 +538,7 @@ if ($null -eq $osdrvurl) {
     } elseif ($osArch -eq "x86" -and [float]$osVersion -ge 7600.0) {
         $osdrvurl = "$Server/d/pxy/System/Driver/DP/DPWin7x86.iso"
     } else {
-        Write-Error "Cannot match related driver iso."
+        Write-Error "无法匹配相关驱动 ISO。"
     }
     $sysVer = $sysVer + "_Net"
     $sysVerCN = $sysVerCN + "_主板驱动"
@@ -573,7 +573,7 @@ function Test-Hashes {
         Write-Host -ForegroundColor Gray "实际值: $actualHash"
         if ($actualHash -ne $expectedHash) {
             # return $false
-            Write-Error "$file hash not match."
+            Write-Error "$file 哈希校验不匹配。"
         } else {
             Write-Host -ForegroundColor Green "$file 哈希校验通过。"
         }
@@ -583,10 +583,10 @@ function Test-SHA256 ([hashtable]$Hashes) { return Test-Hashes -Hashes $Hashes -
 function Test-MD5 ([hashtable]$Hashes) { return Test-Hashes -Hashes $Hashes -Algorithm "MD5" }
 
 if (-not (Test-Path -Path ".\bin\rclone.conf")) {
-    Write-Error "rclone conf not found"
+    Write-Error "未找到 rclone 配置文件"
 }
 if (-not (Test-Path -Path "C:\Program Files\7-Zip\7z.exe")) {
-    Write-Error "7-zip not found, please install it manually!"
+    Write-Error "未找到 7-Zip，请手动安装！"
 }
 if (-not (Test-Path -Path ".\bin\aria2c.exe")) {
     Write-Host "未找到 aria2c，正在下载..."
@@ -648,7 +648,7 @@ if ($osFileext -eq ".iso") {
             $osFilename = "install"
             $osFileext = ".esd"
         } else {
-            Write-Error "extract wim or esd failed!"
+            Write-Error "解压 wim 或 esd 失败！"
         }
     }
     Write-Status -Step "解压ISO镜像" -Status "完成"
