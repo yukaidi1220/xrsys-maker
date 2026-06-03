@@ -119,9 +119,9 @@ jobs:
 
             Write-Host ""
             Write-Host "执行: DISM /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:$pkg1 /PackageName:$pkg2"
-            DISM.exe /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:"$pkg1" /PackageName:"$pkg2" 2>&1 | Tee-Object -FilePath "test1_output.log"
-
+            $output = DISM.exe /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:"$pkg1" /PackageName:"$pkg2" 2>&1
             $exitCode = $LASTEXITCODE
+            $output | Tee-Object -FilePath "test1_output.log"
             Write-Host "退出码: $exitCode"
 
             $remaining = Get-AppxProvisionedPackage -Path $mountDir | Where-Object { $_.PackageName -eq $pkg1 -or $_.PackageName -eq $pkg2 }
@@ -153,9 +153,9 @@ jobs:
 
             Write-Host ""
             Write-Host "执行: DISM /Image:$mountDir /Remove-Capability /CapabilityName:$cap1 /CapabilityName:$cap2"
-            DISM.exe /Image:$mountDir /Remove-Capability /CapabilityName:"$cap1" /CapabilityName:"$cap2" 2>&1 | Tee-Object -FilePath "test2_output.log"
-
+            $output = DISM.exe /Image:$mountDir /Remove-Capability /CapabilityName:"$cap1" /CapabilityName:"$cap2" 2>&1
             $exitCode = $LASTEXITCODE
+            $output | Tee-Object -FilePath "test2_output.log"
             Write-Host "退出码: $exitCode"
 
             $remaining = Get-WindowsCapability -Path $mountDir | Where-Object { ($_.Name -eq $cap1 -or $_.Name -eq $cap2) -and $_.State -eq 'Installed' }
@@ -181,9 +181,9 @@ jobs:
             Write-Host "虚假包: $fakePkg"
             Write-Host ""
             Write-Host "执行: DISM /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:$realPkg /PackageName:$fakePkg"
-            DISM.exe /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:"$realPkg" /PackageName:"$fakePkg" 2>&1 | Tee-Object -FilePath "test3_output.log"
-
+            $output = DISM.exe /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:"$realPkg" /PackageName:"$fakePkg" 2>&1
             $exitCode = $LASTEXITCODE
+            $output | Tee-Object -FilePath "test3_output.log"
             Write-Host "退出码: $exitCode"
 
             $remaining = Get-AppxProvisionedPackage -Path $mountDir | Where-Object { $_.PackageName -eq $realPkg }
@@ -195,8 +195,9 @@ jobs:
 
             Write-Host ""
             Write-Host "检查镜像是否可继续操作..."
-            DISM.exe /Image:$mountDir /Get-ProvisionedAppxPackages 2>&1 | Tee-Object -FilePath "test3_verify.log"
+            $verifyOutput = DISM.exe /Image:$mountDir /Get-ProvisionedAppxPackages 2>&1
             $verifyExit = $LASTEXITCODE
+            $verifyOutput | Tee-Object -FilePath "test3_verify.log"
             Write-Host "验证命令退出码: $verifyExit"
             if ($verifyExit -eq 0) {
               Write-Host "结论: 镜像仍可继续操作"
@@ -226,9 +227,9 @@ jobs:
 
             Write-Host ""
             Write-Host "执行: DISM /Image:$mountDir /Disable-Feature /FeatureName:$feat1 /FeatureName:$feat2"
-            DISM.exe /Image:$mountDir /Disable-Feature /FeatureName:"$feat1" /FeatureName:"$feat2" 2>&1 | Tee-Object -FilePath "test4_output.log"
-
+            $output = DISM.exe /Image:$mountDir /Disable-Feature /FeatureName:"$feat1" /FeatureName:"$feat2" 2>&1
             $exitCode = $LASTEXITCODE
+            $output | Tee-Object -FilePath "test4_output.log"
             Write-Host "退出码: $exitCode"
 
             $feat1State = (Get-WindowsOptionalFeature -Path $mountDir -FeatureName $feat1).State
@@ -238,36 +239,6 @@ jobs:
           } else {
             Write-Host "已启用功能数量不足，跳过测试"
           }
-
-      - name: 测试 5 - PowerShell cmdlet vs DISM.exe 性能对比
-        shell: pwsh
-        run: |
-          $mountDir = "$env:MOUNT_DIR"
-          Write-Host "========================================"
-          Write-Host "测试 5: PowerShell cmdlet vs DISM.exe 性能对比"
-          Write-Host "========================================"
-
-          # 获取要删除的包列表（取前 5 个做对比）
-          $appxPackages = Get-AppxProvisionedPackage -Path $mountDir
-          $testCount = [Math]::Min(5, $appxPackages.Count)
-
-          if ($testCount -eq 0) {
-            Write-Host "没有 Appx 包可供测试"
-            exit 0
-          }
-
-          Write-Host "测试包数量: $testCount"
-
-          # 方法 A: PowerShell cmdlet 逐个删除
-          Write-Host ""
-          Write-Host "方法 A: PowerShell cmdlet 逐个删除 (Remove-AppxProvisionedPackage)"
-          $swA = [System.Diagnostics.Stopwatch]::StartNew()
-          for ($i = 0; $i -lt $testCount; $i++) {
-            $pkg = $appxPackages[$i]
-            Remove-AppxProvisionedPackage -Path $mountDir -PackageName $pkg.PackageName -ErrorAction SilentlyContinue | Out-Null
-          }
-          $swA.Stop()
-          Write-Host "方法 A 耗时: $($swA.Elapsed.TotalSeconds) 秒"
 
       - name: 汇总测试结果
         if: always()
