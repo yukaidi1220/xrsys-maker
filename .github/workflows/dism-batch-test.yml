@@ -1,0 +1,299 @@
+name: DISM 批量化验证
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "目标系统版本"
+        required: true
+        type: choice
+        options:
+          - w1126h164
+          - w1125h264
+          - w1123h264
+          - w1022h264
+          - w11lt2464
+          - w10lt2164
+
+jobs:
+  test-dism-batch:
+    runs-on: windows-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v6
+
+      - name: 下载工具
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "bin" -Force
+          Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/wimlib-1.14.4-windows-x86_64-bin.zip' -OutFile "bin\wimlib.zip"
+          Expand-Archive -Path "bin\wimlib.zip" -DestinationPath "bin\wimlib" -Force
+          Copy-Item "bin\wimlib\wimlib-imagex.exe" "bin\wimlib-imagex.exe"
+          Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/aria2-1.37.0-win-64bit-build1.zip' -OutFile "bin\aria2.zip"
+          Expand-Archive -Path "bin\aria2.zip" -DestinationPath "bin\aria2" -Force
+          Copy-Item "bin\aria2\aria2-1.37.0-win-64bit-build1\aria2c.exe" "bin\aria2c.exe"
+
+      - name: 下载测试镜像
+        shell: pwsh
+        run: |
+          $target = "${{ inputs.target }}"
+          $MSUpdate_URL = "https://list.xrgzs.top/d/pxy/System/MSUpdate"
+
+          switch ($target) {
+            "w1126h164" {
+              $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/26H1/latest_x64.json"
+              $osUrl = "$MSUpdate_URL/11/26H1/" + $obj.os_version + '/' + $obj.name
+              $osFile = $obj.name
+              $osIndex = 4
+            }
+            "w1125h264" {
+              $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/25H2/latest_x64.json"
+              $osUrl = "$MSUpdate_URL/11/25H2/" + $obj.os_version + '/' + $obj.name
+              $osFile = $obj.name
+              $osIndex = 4
+            }
+            "w1123h264" {
+              $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/23H2/latest_x64.json"
+              $osUrl = "$MSUpdate_URL/11/23H2/" + $obj.os_version + '/' + $obj.name
+              $osFile = $obj.name
+              $osIndex = 4
+            }
+            "w1022h264" {
+              $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/22H2/latest_x64.json"
+              $osUrl = "$MSUpdate_URL/10/22H2/" + $obj.os_version + '/' + $obj.name
+              $osFile = $obj.name
+              $osIndex = 4
+            }
+            "w11lt2464" {
+              $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/LTSC2024/latest_x64.json"
+              $osUrl = "$MSUpdate_URL/11/LTSC2024/" + $obj.os_version + '/' + $obj.name
+              $osFile = $obj.name
+              $osIndex = 1
+            }
+            "w10lt2164" {
+              $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/LTSC2021/latest_x64.json"
+              $osUrl = "$MSUpdate_URL/10/LTSC2021/" + $obj.os_version + '/' + $obj.name
+              $osFile = $obj.name
+              $osIndex = 1
+            }
+          }
+
+          Write-Host "下载镜像: $osUrl"
+          & .\bin\aria2c.exe --no-conf=true --continue --allow-overwrite=true --summary-interval=0 --remote-time=true --retry-wait=5 --check-certificate=false -s16 -x16 "$osUrl" --out="$osFile"
+
+          # 如果是 ISO，解压出 install.wim
+          $ext = [System.IO.Path]::GetExtension("$osFile")
+          if ($ext -eq ".iso") {
+            & "C:\Program Files\7-Zip\7z.exe" e -y "$osFile" sources\install.wim
+            $osFile = "install.wim"
+          }
+
+          "OS_FILE=$osFile" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OS_INDEX=$osIndex" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: 释放镜像到目录
+        shell: pwsh
+        run: |
+          $mountDir = "$(Get-Location)\mount"
+          New-Item -ItemType Directory -Path $mountDir -Force
+          Write-Host "释放镜像到 $mountDir..."
+          .\bin\wimlib-imagex.exe apply "$env:OS_FILE" $env:OS_INDEX "$mountDir"
+          "MOUNT_DIR=$mountDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: 测试 1 - DISM /Remove-ProvisionedAppxPackage 多参数支持
+        shell: pwsh
+        run: |
+          $mountDir = "$env:MOUNT_DIR"
+          Write-Host "========================================"
+          Write-Host "测试 1: DISM /Remove-ProvisionedAppxPackage 多参数支持"
+          Write-Host "========================================"
+
+          $appxPackages = Get-AppxProvisionedPackage -Path $mountDir
+          Write-Host "当前已预装 Appx 包数量: $($appxPackages.Count)"
+
+          if ($appxPackages.Count -ge 2) {
+            $pkg1 = $appxPackages[0].PackageName
+            $pkg2 = $appxPackages[1].PackageName
+            Write-Host "测试包 1: $pkg1"
+            Write-Host "测试包 2: $pkg2"
+
+            Write-Host ""
+            Write-Host "执行: DISM /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:$pkg1 /PackageName:$pkg2"
+            DISM.exe /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:"$pkg1" /PackageName:"$pkg2" 2>&1 | Tee-Object -FilePath "test1_output.log"
+
+            $exitCode = $LASTEXITCODE
+            Write-Host "退出码: $exitCode"
+
+            $remaining = Get-AppxProvisionedPackage -Path $mountDir | Where-Object { $_.PackageName -eq $pkg1 -or $_.PackageName -eq $pkg2 }
+            Write-Host "删除后剩余测试包数量: $($remaining.Count)"
+            if ($remaining.Count -eq 0) { Write-Host "结论: 多参数支持，两个包都被删除" }
+            elseif ($remaining.Count -eq 1) { Write-Host "结论: 可能只处理了第一个参数" }
+            else { Write-Host "结论: 两个包都还在，可能完全不支持多参数" }
+          } else {
+            Write-Host "Appx 包数量不足，跳过测试"
+          }
+
+      - name: 测试 2 - DISM /Remove-Capability 多参数支持
+        shell: pwsh
+        run: |
+          $mountDir = "$env:MOUNT_DIR"
+          Write-Host "========================================"
+          Write-Host "测试 2: DISM /Remove-Capability 多参数支持"
+          Write-Host "========================================"
+
+          $capabilities = Get-WindowsCapability -Path $mountDir
+          $installedCaps = $capabilities | Where-Object { $_.State -eq 'Installed' }
+          Write-Host "已安装 Capability 数量: $($installedCaps.Count)"
+
+          if ($installedCaps.Count -ge 2) {
+            $cap1 = $installedCaps[0].Name
+            $cap2 = $installedCaps[1].Name
+            Write-Host "测试 Capability 1: $cap1"
+            Write-Host "测试 Capability 2: $cap2"
+
+            Write-Host ""
+            Write-Host "执行: DISM /Image:$mountDir /Remove-Capability /CapabilityName:$cap1 /CapabilityName:$cap2"
+            DISM.exe /Image:$mountDir /Remove-Capability /CapabilityName:"$cap1" /CapabilityName:"$cap2" 2>&1 | Tee-Object -FilePath "test2_output.log"
+
+            $exitCode = $LASTEXITCODE
+            Write-Host "退出码: $exitCode"
+
+            $remaining = Get-WindowsCapability -Path $mountDir | Where-Object { ($_.Name -eq $cap1 -or $_.Name -eq $cap2) -and $_.State -eq 'Installed' }
+            Write-Host "删除后剩余测试 Capability 数量: $($remaining.Count)"
+          } else {
+            Write-Host "已安装 Capability 数量不足，跳过测试"
+          }
+
+      - name: 测试 3 - 批量中途失败行为
+        shell: pwsh
+        run: |
+          $mountDir = "$env:MOUNT_DIR"
+          Write-Host "========================================"
+          Write-Host "测试 3: 批量中途失败行为"
+          Write-Host "========================================"
+
+          $appxPackages = Get-AppxProvisionedPackage -Path $mountDir
+          if ($appxPackages.Count -gt 0) {
+            $realPkg = $appxPackages[0].PackageName
+            $fakePkg = "Fake.Package.Not.Exist_1.0.0.0_x64__8wekyb3d8bbwe"
+
+            Write-Host "真实包: $realPkg"
+            Write-Host "虚假包: $fakePkg"
+            Write-Host ""
+            Write-Host "执行: DISM /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:$realPkg /PackageName:$fakePkg"
+            DISM.exe /Image:$mountDir /Remove-ProvisionedAppxPackage /PackageName:"$realPkg" /PackageName:"$fakePkg" 2>&1 | Tee-Object -FilePath "test3_output.log"
+
+            $exitCode = $LASTEXITCODE
+            Write-Host "退出码: $exitCode"
+
+            $remaining = Get-AppxProvisionedPackage -Path $mountDir | Where-Object { $_.PackageName -eq $realPkg }
+            if ($remaining) {
+              Write-Host "真实包仍然存在 -> 可能是回滚，或错误导致整个操作中止"
+            } else {
+              Write-Host "真实包已被删除 -> 部分提交（错误包被跳过或回滚不影响前面的）"
+            }
+
+            Write-Host ""
+            Write-Host "检查镜像是否可继续操作..."
+            DISM.exe /Image:$mountDir /Get-ProvisionedAppxPackages 2>&1 | Tee-Object -FilePath "test3_verify.log"
+            $verifyExit = $LASTEXITCODE
+            Write-Host "验证命令退出码: $verifyExit"
+            if ($verifyExit -eq 0) {
+              Write-Host "结论: 镜像仍可继续操作"
+            } else {
+              Write-Host "结论: 镜像可能处于不一致状态，需要 -Discard"
+            }
+          } else {
+            Write-Host "没有 Appx 包可供测试"
+          }
+
+      - name: 测试 4 - /Disable-Feature 多参数支持
+        shell: pwsh
+        run: |
+          $mountDir = "$env:MOUNT_DIR"
+          Write-Host "========================================"
+          Write-Host "测试 4: /Disable-Feature 多参数支持"
+          Write-Host "========================================"
+
+          $features = Get-WindowsOptionalFeature -Path $mountDir | Where-Object { $_.State -eq 'Enabled' }
+          Write-Host "已启用功能数量: $($features.Count)"
+
+          if ($features.Count -ge 2) {
+            $feat1 = $features[0].FeatureName
+            $feat2 = $features[1].FeatureName
+            Write-Host "测试功能 1: $feat1"
+            Write-Host "测试功能 2: $feat2"
+
+            Write-Host ""
+            Write-Host "执行: DISM /Image:$mountDir /Disable-Feature /FeatureName:$feat1 /FeatureName:$feat2"
+            DISM.exe /Image:$mountDir /Disable-Feature /FeatureName:"$feat1" /FeatureName:"$feat2" 2>&1 | Tee-Object -FilePath "test4_output.log"
+
+            $exitCode = $LASTEXITCODE
+            Write-Host "退出码: $exitCode"
+
+            $feat1State = (Get-WindowsOptionalFeature -Path $mountDir -FeatureName $feat1).State
+            $feat2State = (Get-WindowsOptionalFeature -Path $mountDir -FeatureName $feat2).State
+            Write-Host "功能 1 状态: $feat1State"
+            Write-Host "功能 2 状态: $feat2State"
+          } else {
+            Write-Host "已启用功能数量不足，跳过测试"
+          }
+
+      - name: 测试 5 - PowerShell cmdlet vs DISM.exe 性能对比
+        shell: pwsh
+        run: |
+          $mountDir = "$env:MOUNT_DIR"
+          Write-Host "========================================"
+          Write-Host "测试 5: PowerShell cmdlet vs DISM.exe 性能对比"
+          Write-Host "========================================"
+
+          # 获取要删除的包列表（取前 5 个做对比）
+          $appxPackages = Get-AppxProvisionedPackage -Path $mountDir
+          $testCount = [Math]::Min(5, $appxPackages.Count)
+
+          if ($testCount -eq 0) {
+            Write-Host "没有 Appx 包可供测试"
+            exit 0
+          }
+
+          Write-Host "测试包数量: $testCount"
+
+          # 方法 A: PowerShell cmdlet 逐个删除
+          Write-Host ""
+          Write-Host "方法 A: PowerShell cmdlet 逐个删除 (Remove-AppxProvisionedPackage)"
+          $swA = [System.Diagnostics.Stopwatch]::StartNew()
+          for ($i = 0; $i -lt $testCount; $i++) {
+            $pkg = $appxPackages[$i]
+            Remove-AppxProvisionedPackage -Path $mountDir -PackageName $pkg.PackageName -ErrorAction SilentlyContinue | Out-Null
+          }
+          $swA.Stop()
+          Write-Host "方法 A 耗时: $($swA.Elapsed.TotalSeconds) 秒"
+
+      - name: 汇总测试结果
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "========================================"
+          Write-Host "测试结果汇总"
+          Write-Host "========================================"
+
+          $testFiles = @("test1_output.log", "test2_output.log", "test3_output.log", "test4_output.log")
+          foreach ($file in $testFiles) {
+            if (Test-Path $file) {
+              Write-Host ""
+              Write-Host "--- $file ---"
+              Get-Content $file | ForEach-Object { Write-Host $_ }
+            }
+          }
+
+      - name: 清理
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "清理测试环境..."
+          $mountDir = "$env:MOUNT_DIR"
+          if ($mountDir -and (Test-Path $mountDir)) {
+            Remove-Item -Path $mountDir -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          Remove-Item -Path "*.iso", "*.wim", "*.esd", "*.zip" -ErrorAction SilentlyContinue
+          Remove-Item -Path "bin", "mount" -Recurse -Force -ErrorAction SilentlyContinue
