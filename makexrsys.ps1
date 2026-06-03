@@ -20,7 +20,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Server = "https://res.yukaidi.top"
-$xrServer = "https://res.yukaidi.top"
+$xrServer = "https://list.xrgzs.top"
 $MSUpdate_URL = "$xrServer/d/pxy/System/MSUpdate"
 $Driver_URL = "$Server/d/gslb/mupan/"
 $Tools_URL = "$Server/d/gslb/mupan/Tools_XR"
