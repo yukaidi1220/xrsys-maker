@@ -1,9 +1,9 @@
 name: 自动批量制作潇然系统
 on:
   workflow_dispatch:
-  schedule:
-    # - cron: '0 0 * * *' # 每日构建
-    - cron: "0 0 * * 5" # 每周构建
+  # schedule:
+  #   # - cron: '0 0 * * *' # 每日构建
+  #   - cron: "0 0 * * 5" # 每周构建
 
 jobs:
   makexrsys:
