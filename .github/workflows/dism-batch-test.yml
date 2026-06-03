@@ -82,11 +82,21 @@ jobs:
           Write-Host "下载镜像: $osUrl"
           & .\bin\aria2c.exe --no-conf=true --continue --allow-overwrite=true --summary-interval=0 --remote-time=true --retry-wait=5 --check-certificate=false -s16 -x16 "$osUrl" --out="$osFile"
 
-          # 如果是 ISO，解压出 install.wim
+          # 如果是 ISO，解压出 install.wim 或 install.esd
           $ext = [System.IO.Path]::GetExtension("$osFile")
           if ($ext -eq ".iso") {
             & "C:\Program Files\7-Zip\7z.exe" e -y "$osFile" sources\install.wim
-            $osFile = "install.wim"
+            if (Test-Path "install.wim") {
+              $osFile = "install.wim"
+            } else {
+              & "C:\Program Files\7-Zip\7z.exe" e -y "$osFile" sources\install.esd
+              if (Test-Path "install.esd") {
+                $osFile = "install.esd"
+              } else {
+                Write-Error "解压 install.wim 和 install.esd 均失败"
+                exit 1
+              }
+            }
           }
 
           # 检查文件是否存在
