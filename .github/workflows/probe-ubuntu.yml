@@ -1,0 +1,356 @@
+name: 系统环境探测 (Ubuntu)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_speedtest:
+        description: "是否运行网络测速"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 测试计时函数
+        shell: bash
+        run: |
+          # 计时器关联数组
+          declare -A STEP_TIMERS
+
+          # 监控函数：输出系统状态和耗时
+          write_status() {
+            local step="$1"
+            local status="$2"
+
+            # 获取中国标准时间
+            local time=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
+
+            # 获取内存信息
+            local mem_info=$(free -m | awk 'NR==2{printf "%.2f/%.2f GB (%.1f%%)", $3/1024, $2/1024, $3*100/$2}')
+            local total_mem=$(free -m | awk 'NR==2{printf "%.2f", $2/1024}')
+            local used_mem=$(free -m | awk 'NR==2{printf "%.2f", $3/1024}')
+            local mem_percent=$(free -m | awk 'NR==2{printf "%.1f", $3*100/$2}')
+
+            # 获取磁盘信息
+            local root_free=$(df -BG / | awk 'NR==2{print $4}' | sed 's/G//')
+            local tmp_free=$(df -BG /tmp 2>/dev/null | awk 'NR==2{print $4}' | sed 's/G//' || echo "N/A")
+
+            # 计时逻辑
+            local duration=""
+            if [ "$status" = "开始" ]; then
+              STEP_TIMERS["$step"]=$(date +%s)
+            elif [ "$status" = "完成" ] && [ -n "${STEP_TIMERS[$step]}" ]; then
+              local start_time=${STEP_TIMERS[$step]}
+              local end_time=$(date +%s)
+              local elapsed=$((end_time - start_time))
+              local hours=$((elapsed / 3600))
+              local minutes=$(( (elapsed % 3600) / 60 ))
+              local seconds=$((elapsed % 60))
+              duration=" | 耗时: $(printf '%02d:%02d:%02d' $hours $minutes $seconds)"
+              unset STEP_TIMERS["$step"]
+            fi
+
+            echo ""
+            echo "========================================"
+            echo "[$time] $step - $status$duration"
+            echo "内存: ${used_mem}/${total_mem} GB (${mem_percent}%)"
+            echo "根分区可用: ${root_free} GB | /tmp可用: ${tmp_free} GB"
+            echo "========================================"
+            echo ""
+          }
+
+          # 测试
+          write_status "测试任务1" "开始"
+          sleep 3
+          write_status "测试任务1" "完成"
+
+          write_status "测试任务2" "开始"
+          sleep 5
+          write_status "测试任务2" "完成"
+
+      - name: 测试 wimlib 日志限速
+        shell: bash
+        run: |
+          # wimlib 日志限速输出函数
+          invoke_wimlib() {
+            local script_content="$1"
+
+            local rate_limited_patterns=(
+              'Creating files'
+              'Extracting file data'
+              'Applying metadata to files'
+              'MiB scanned'
+              'Archiving file data'
+            )
+
+            local last_output_time=0
+            local last_monitor_time=0
+            local log_file="./wimlib_temp.log"
+
+            # 执行脚本并将输出重定向到日志文件
+            bash -c "$script_content" > "$log_file" 2>&1 &
+            local pid=$!
+
+            local read_position=0
+
+            while kill -0 $pid 2>/dev/null; do
+              sleep 0.1
+              if [ -f "$log_file" ]; then
+                # 读取新内容
+                local new_content=$(tail -c +$((read_position + 1)) "$log_file" 2>/dev/null)
+                if [ -n "$new_content" ]; then
+                  while IFS= read -r line; do
+                    read_position=$((read_position + ${#line} + 1))
+                    local should_rate_limit=false
+                    for pattern in "${rate_limited_patterns[@]}"; do
+                      if [[ "$line" == *"$pattern"* ]]; then
+                        should_rate_limit=true
+                        break
+                      fi
+                    done
+
+                    if [ "$should_rate_limit" = true ]; then
+                      local now=$(date +%s)
+                      if [ $((now - last_output_time)) -ge 15 ]; then
+                        echo "$line"
+                        last_output_time=$now
+                      fi
+                    else
+                      echo "$line"
+                    fi
+                  done <<< "$new_content"
+                fi
+              fi
+
+              # 每30秒输出 CPU 和内存占用
+              local now=$(date +%s)
+              if [ $((now - last_monitor_time)) -ge 30 ]; then
+                last_monitor_time=$now
+                local cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}')
+                local mem_info=$(free -m | awk 'NR==2{printf "%.2f/%.2f GB (%.1f%%)", $3/1024, $2/1024, $3*100/$2}')
+                echo -e "\033[90m[资源监控] CPU: ${cpu_usage}% | 内存: ${mem_info}\033[0m"
+              fi
+            done
+
+            # 输出剩余内容
+            if [ -f "$log_file" ]; then
+              local remaining=$(tail -c +$((read_position + 1)) "$log_file" 2>/dev/null)
+              if [ -n "$remaining" ]; then
+                echo "$remaining"
+              fi
+              rm -f "$log_file"
+            fi
+
+            wait $pid
+            return $?
+          }
+
+          # 创建模拟脚本：快速输出大量日志（持续约40秒）
+          mock_script='
+          for i in $(seq 1 20); do
+            echo "Creating files [$i/20]..."
+            sleep 0.5
+          done
+          echo "Processing normal log line 1"
+          for i in $(seq 1 10); do
+            echo "Extracting file data [$i/10]..."
+            sleep 0.5
+          done
+          echo "Processing normal log line 2"
+          echo "Applying metadata to files..."
+          echo "MiB scanned 1024"
+          echo "Archiving file data..."
+          for i in $(seq 1 20); do
+            echo "Extracting file data [$i/20]..."
+            sleep 0.3
+          done
+          echo "Done!"
+          '
+
+          echo "=== 测试 wimlib 日志限速 ==="
+          echo "预期：关键词行每15秒输出一次，普通行直接输出"
+          echo ""
+
+          invoke_wimlib "$mock_script"
+
+      - name: 测试中文编码
+        shell: bash
+        run: |
+          # 创建测试脚本（UTF-8 编码）
+          cat > ./test_utf8.sh << 'EOF'
+          #!/bin/bash
+          echo "=== 测试中文输出 ==="
+          echo "这是第一行中文"
+          echo "正在处理文件..."
+          echo "完成！"
+          echo "=== 测试结束 ==="
+          EOF
+
+          chmod +x ./test_utf8.sh
+
+          echo "=== 执行 UTF-8 版本 ==="
+          echo ""
+          ./test_utf8.sh
+
+          echo ""
+          echo "=== 测试 locale 设置 ==="
+          echo "当前 locale: $(locale)"
+          echo "LANG: $LANG"
+          echo "LC_ALL: $LC_ALL"
+
+          echo ""
+          echo "=== 测试完成 ==="
+
+          rm -f ./test_utf8.sh
+
+      - name: 查看网络信息
+        shell: bash
+        run: |
+          echo "=== 网络信息 ==="
+
+          # 获取公网 IP
+          echo "--- 公网 IP ---"
+          ipv4=$(curl -s --max-time 5 https://4.itdog.cn 2>/dev/null || echo "获取失败")
+          echo "IPv4: $ipv4"
+
+          ipv6=$(curl -s --max-time 5 https://6.itdog.cn 2>/dev/null || echo "获取失败或不支持")
+          echo "IPv6: $ipv6"
+
+          # 获取 IP 归属地
+          echo ""
+          echo "--- IP 归属地 ---"
+          geo=$(curl -s --max-time 5 https://myip.ipip.net/json 2>/dev/null)
+          if [ -n "$geo" ]; then
+            location=$(echo "$geo" | jq -r '.data.location | join(" ")' 2>/dev/null)
+            if [ -n "$location" ] && [ "$location" != "null" ]; then
+              echo "归属地: $location"
+            else
+              echo "归属地: 解析失败"
+            fi
+          else
+            echo "归属地: 获取失败"
+          fi
+
+          # 网络接口信息
+          echo ""
+          echo "--- 网络接口 ---"
+          ip -4 addr show | grep -E "^[0-9]+:|inet " | awk '
+          /^[0-9]+:/ {iface=$2}
+          /inet / {print iface, $2}'
+
+      - name: 查看分区信息
+        shell: bash
+        run: |
+          echo "=== 分区信息 ==="
+          df -hT | grep -v tmpfs | grep -v devtmpfs
+
+      - name: 查看磁盘信息
+        shell: bash
+        run: |
+          echo "=== 物理磁盘信息 ==="
+          lsblk -d -o NAME,SIZE,TYPE,MODEL 2>/dev/null || fdisk -l 2>/dev/null | grep "^Disk /"
+
+          echo ""
+          echo "=== 磁盘分区详情 ==="
+          lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE 2>/dev/null || mount | grep "^/dev"
+
+      - name: 查看CPU详细信息
+        shell: bash
+        run: |
+          echo "=== CPU 信息 ==="
+          echo "型号: $(grep 'model name' /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)"
+          echo "制造商: $(grep 'vendor_id' /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)"
+          echo "核心数: $(grep -c '^processor' /proc/cpuinfo)"
+          echo "逻辑处理器数: $(nproc)"
+          echo "最大时钟速度: $(grep 'cpu MHz' /proc/cpuinfo | head -1 | cut -d: -f2 | xargs) MHz"
+
+          echo ""
+          echo "=== CPU 缓存信息 ==="
+          if [ -d /sys/devices/system/cpu/cpu0/cache ]; then
+            for cache in /sys/devices/system/cpu/cpu0/cache/index*; do
+              if [ -f "$cache/level" ] && [ -f "$cache/size" ]; then
+                level=$(cat "$cache/level")
+                size=$(cat "$cache/size")
+                type=$(cat "$cache/type" 2>/dev/null || echo "unknown")
+                echo "L${level}: ${size} (${type})"
+              fi
+            done
+          else
+            lscpu | grep -i "cache" || echo "缓存信息不可用"
+          fi
+
+          echo ""
+          echo "=== CPU 架构 ==="
+          lscpu | grep -E "Architecture|CPU\(s\)|Thread|Core|Socket|Model name|CPU MHz"
+
+      - name: 查看内存和虚拟内存信息
+        shell: bash
+        run: |
+          echo "=== 物理内存信息 ==="
+          total_mem=$(free -g | awk 'NR==2{print $2}')
+          used_mem=$(free -g | awk 'NR==2{print $3}')
+          free_mem=$(free -g | awk 'NR==2{print $4}')
+          mem_percent=$(free | awk 'NR==2{printf "%.1f", $3*100/$2}')
+
+          echo "总物理内存: ${total_mem} GB"
+          echo "可用物理内存: ${free_mem} GB"
+          echo "已用物理内存: ${used_mem} GB (${mem_percent}%)"
+
+          echo ""
+          echo "=== 内存详细信息 ==="
+          if command -v dmidecode &>/dev/null; then
+            sudo dmidecode -t memory 2>/dev/null | grep -A 10 "Memory Device" | grep -E "Size|Type|Speed|Manufacturer|Locator" || echo "需要 root 权限或 dmidecode 不可用"
+          else
+            echo "dmidecode 未安装"
+          fi
+
+          echo ""
+          echo "=== 虚拟内存（交换空间）信息 ==="
+          swapon --show 2>/dev/null || cat /proc/swaps
+
+          echo ""
+          echo "=== 虚拟内存汇总 ==="
+          swap_total=$(free -g | awk 'NR==3{print $2}')
+          swap_used=$(free -g | awk 'NR==3{print $3}')
+          swap_free=$(free -g | awk 'NR==3{print $4}')
+          echo "总交换空间: ${swap_total} GB"
+          echo "已用交换空间: ${swap_used} GB"
+          echo "可用交换空间: ${swap_free} GB"
+
+          echo ""
+          echo "=== 内核内存参数 ==="
+          echo "vm.swappiness: $(cat /proc/sys/vm/swappiness)"
+          echo "vm.vfs_cache_pressure: $(cat /proc/sys/vm/vfs_cache_pressure)"
+          echo "vm.overcommit_memory: $(cat /proc/sys/vm/overcommit_memory)"
+
+      - name: 安装 speedtest
+        if: ${{ inputs.run_speedtest == true }}
+        shell: bash
+        run: |
+          echo "=== 安装 speedtest ==="
+          # 安装 speedtest-cli
+          curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash
+          sudo apt-get install -y speedtest
+
+      - name: 测试服务器 73226
+        if: ${{ inputs.run_speedtest == true }}
+        shell: bash
+        run: |
+          echo "=== 网络速度测试（73226） ==="
+          speedtest --accept-license --accept-gdpr --server-id=73226
+
+      - name: 测试服务器 29716
+        if: ${{ inputs.run_speedtest == true }}
+        shell: bash
+        run: |
+          echo "=== 网络速度测试（29716） ==="
+          speedtest --accept-license --accept-gdpr --server-id=29716
+
+      - name: 测试新加坡服务器 26654
+        if: ${{ inputs.run_speedtest == true }}
+        shell: bash
+        run: |
+          echo "=== 网络速度测试（新加坡 26654 - fdcservers） ==="
+          speedtest --accept-license --accept-gdpr --server-id=26654
