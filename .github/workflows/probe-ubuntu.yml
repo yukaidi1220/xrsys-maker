@@ -256,6 +256,10 @@ jobs:
           echo "=== 磁盘分区详情 ==="
           lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE 2>/dev/null || mount | grep "^/dev"
 
+          echo ""
+          echo "=== 分区使用情况 ==="
+          df -hT | grep -v tmpfs | grep -v devtmpfs
+
       - name: 查看CPU详细信息
         shell: bash
         run: |
