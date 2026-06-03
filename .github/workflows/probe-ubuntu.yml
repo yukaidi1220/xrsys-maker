@@ -240,6 +240,117 @@ jobs:
           /^[0-9]+:/ {iface=$2}
           /inet / {print iface, $2}'
 
+      - name: 探测 IPv6 连通性
+        shell: bash
+        run: |
+          echo "=== IPv6 全面探测 ==="
+
+          # 1. IPv6 地址信息
+          echo ""
+          echo "--- IPv6 地址 ---"
+          ip -6 addr show | grep -v "scope link" | grep "inet6" | awk '{print $NF, $2}'
+
+          echo ""
+          echo "--- IPv6 链路本地地址 ---"
+          ip -6 addr show | grep "scope link" | grep "inet6" | awk '{print $NF, $2}'
+
+          # 2. IPv6 路由表
+          echo ""
+          echo "--- IPv6 路由表 ---"
+          ip -6 route show
+
+          echo ""
+          echo "--- IPv6 默认路由 ---"
+          ip -6 route show default
+
+          # 3. IPv6 邻居表 (ARP 等价)
+          echo ""
+          echo "--- IPv6 邻居表 ---"
+          ip -6 neigh show
+
+          # 4. IPv6 网卡设置
+          echo ""
+          echo "--- 网卡 IPv6 设置 ---"
+          for iface in $(ip -6 addr show | awk '/^[0-9]+:/ {print $2}' | tr -d ':' | sort -u); do
+            echo "网卡: $iface"
+            echo "  状态: $(cat /sys/class/net/$iface/operstate 2>/dev/null || echo 'unknown')"
+            echo "  MTU: $(cat /sys/class/net/$iface/mtu 2>/dev/null || echo 'unknown')"
+            echo "  IPv6 转发: $(cat /proc/sys/net/ipv6/conf/$iface/forwarding 2>/dev/null || echo 'unknown')"
+            echo "  IPv6 自动配置: $(cat /proc/sys/net/ipv6/conf/$iface/accept_ra 2>/dev/null || echo 'unknown')"
+            echo "  IPv6 隐私扩展: $(cat /proc/sys/net/ipv6/conf/$iface/use_tempaddr 2>/dev/null || echo 'unknown')"
+            echo "  IPv6 信任邻居: $(cat /proc/sys/net/ipv6/conf/$iface/trust_ndisc 2>/dev/null || echo 'unknown')"
+            echo ""
+          done
+
+          # 5. IPv6 内核参数
+          echo "--- IPv6 全局内核参数 ---"
+          echo "IPv6 转发: $(cat /proc/sys/net/ipv6/conf/all/forwarding)"
+          echo "IPv6 默认接受 RA: $(cat /proc/sys/net/ipv6/conf/all/accept_ra)"
+          echo "IPv6 隐私扩展: $(cat /proc/sys/net/ipv6/conf/all/use_tempaddr)"
+          echo "IPv6 禁用: $(cat /proc/sys/net/ipv6/conf/all/disable_ipv6)"
+
+          # 6. IPv6 连通性测试
+          echo ""
+          echo "--- IPv6 连通性测试 ---"
+
+          # 测试 IPv6 DNS 解析
+          echo "DNS 解析测试 (AAAA 记录):"
+          if host -t AAAA ipv6.google.com >/dev/null 2>&1; then
+            echo "  ✓ DNS AAAA 解析正常"
+          else
+            echo "  ✗ DNS AAAA 解析失败"
+          fi
+
+          # 测试 IPv6 环回地址
+          echo ""
+          echo "环回地址测试:"
+          if ping6 -c 1 -W 2 ::1 >/dev/null 2>&1; then
+            echo "  ✓ ::1 (环回) 可达"
+          else
+            echo "  ✗ ::1 (环回) 不可达"
+          fi
+
+          # 测试链路本地网关
+          echo ""
+          echo "链路本地网关测试:"
+          default_gw=$(ip -6 route show default | awk '{print $3}' | head -1)
+          if [ -n "$default_gw" ]; then
+            echo "  默认网关: $default_gw"
+            if ping6 -c 1 -W 2 "$default_gw" >/dev/null 2>&1; then
+              echo "  ✓ 网关可达"
+            else
+              echo "  ✗ 网关不可达"
+            fi
+          else
+            echo "  ✗ 未找到默认网关"
+          fi
+
+          # 测试公网 IPv6 连通性
+          echo ""
+          echo "公网连通性测试:"
+          ipv6_test_hosts=("2001:4860:4860::8888" "2606:4700:4700::1111" "2001:db8::1")
+          for host in "${ipv6_test_hosts[@]}"; do
+            if ping6 -c 1 -W 2 "$host" >/dev/null 2>&1; then
+              echo "  ✓ $host 可达"
+            else
+              echo "  ✗ $host 不可达"
+            fi
+          done
+
+          # 7. IPv6 连接详情
+          echo ""
+          echo "--- IPv6 连接详情 ---"
+          ss -6 -tunlp 2>/dev/null || echo "ss 命令不可用"
+
+          # 8. 测试 IPv6 HTTP 连通性
+          echo ""
+          echo "--- IPv6 HTTP 连通性 ---"
+          if curl -6 -s --max-time 5 https://ipv6.icanhazip.com >/dev/null 2>&1; then
+            echo "  ✓ IPv6 HTTP 连接成功"
+          else
+            echo "  ✗ IPv6 HTTP 连接失败"
+          fi
+
       - name: 查看分区信息
         shell: bash
         run: |
