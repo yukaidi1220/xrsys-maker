@@ -19,13 +19,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Server = "https://list.xrgzs.top"
-$MSUpdate_URL = "$Server/d/pxy/System/MSUpdate"
-$Driver_URL = "$Server/d/pxy/System/Driver"
-$Tools_URL = "$Server/d/pxy/Xiaoran%20Studio/Tools"
-$Software_URL = "$Server/d/pxy/Software"
+$Server = "https://res.yukaidi.top"
+$xrServer = "https://res.yukaidi.top"
+$MSUpdate_URL = "$xrServer/d/pxy/System/MSUpdate"
+$Driver_URL = "$Server/d/gslb/mupan/"
+$Tools_URL = "$Server/d/gslb/mupan/Tools_XR"
+$Software_URL = "$xrServer/d/pxy/Software"
 $OSC_URL = "https://github.com/yukaidi1220/xrsys-maker/releases/download/OSC_URL/osc.exe"
-$rclone_build_point = "zhipin:/Share/System"
+$rclone_build_point = "zhipin:/File/System"
 
 # wimlib 日志限速输出函数
 function Invoke-Wimlib {
@@ -534,15 +535,15 @@ if ($FullDrv) {
 # dealosdriver
 if ($null -eq $osdrvurl) {
     if ($osArch -eq "x64" -and [float]$osVersion -ge 19041.0) {
-        $osdrvurl = "$Driver_URL/DP/NET/NET10x64.iso"
+        $osdrvurl = "$Driver_URL/DriverPack_XR/NET/NET10x64.iso"
     } elseif ($osArch -eq "arm64" -and [float]$osVersion -ge 19041.0) {
-        $osdrvurl = "$Driver_URL/DP/NET/NET10a64.iso"
+        $osdrvurl = "$Driver_URL/DriverPack_XR/NET/NET10a64.iso"
     } elseif ($osArch -eq "x64" -and [float]$osVersion -ge 10240.0) {
-        $osdrvurl = "$Driver_URL/DP/DPWin10x64.iso"
+        $osdrvurl = "$Driver_URL/DriverPack_XR/DPWin10x64.iso"
     } elseif ($osArch -eq "x64" -and [float]$osVersion -ge 7600.0) {
-        $osdrvurl = "$Driver_URL/DP/DPWin7x64.iso"
+        $osdrvurl = "$Driver_URL/DriverPack_XR/DPWin7x64.iso"
     } elseif ($osArch -eq "x86" -and [float]$osVersion -ge 7600.0) {
-        $osdrvurl = "$Driver_URL/DP/DPWin7x86.iso"
+        $osdrvurl = "$Driver_URL/DriverPack_XR/DPWin7x86.iso"
     } else {
         Write-Error "无法匹配相关驱动 ISO。"
     }
@@ -596,7 +597,7 @@ if (-not (Test-Path -Path "C:\Program Files\7-Zip\7z.exe")) {
 }
 if (-not (Test-Path -Path ".\bin\aria2c.exe")) {
     Write-Host "未找到 aria2c，正在下载..."
-    Invoke-WebRequest -Uri 'https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip' -OutFile ".\temp\aria2.zip"
+    Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/aria2-1.37.0-win-64bit-build1.zip' -OutFile ".\temp\aria2.zip"
     Expand-Archive -Path ".\temp\aria2.zip" -DestinationPath ".\temp" -Force
     Move-Item -Path ".\temp\aria2-1.37.0-win-64bit-build1\aria2c.exe" -Destination ".\bin\aria2c.exe" -Force
 }
@@ -605,7 +606,7 @@ Test-SHA256 @{
 }
 if (-not (Test-Path -Path ".\bin\wimlib-imagex.exe")) {
     Write-Host "未找到 wimlib-imagex，正在下载..."
-    Invoke-WebRequest -Uri 'https://github.com/user-attachments/files/24684304/wimlib-1.14.4-windows-x86_64-bin.zip' -OutFile ".\temp\wimlib.zip"
+    Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/wimlib-1.14.4-windows-x86_64-bin.zip' -OutFile ".\temp\wimlib.zip"
     Expand-Archive -Path ".\temp\wimlib.zip" -DestinationPath ".\temp\wimlib" -Force
     Copy-Item -Path ".\temp\wimlib\wimlib-imagex.exe" -Destination ".\bin\wimlib-imagex.exe"
     Copy-Item -Path ".\temp\wimlib\libwim-15.dll" -Destination ".\bin\libwim-15.dll"
@@ -616,7 +617,7 @@ Test-SHA256 @{
 }
 if (-not (Test-Path -Path ".\bin\rclone.exe")) {
     Write-Host "未找到 rclone，正在下载..."
-    Invoke-WebRequest -Uri 'https://downloads.rclone.org/rclone-current-windows-amd64.zip' -outfile .\temp\rclone.zip
+    Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/rclone-current-windows-amd64.zip' -outfile .\temp\rclone.zip
     Expand-Archive -Path .\temp\rclone.zip -DestinationPath .\temp\ -Force
     Copy-Item -Path .\temp\rclone-*-windows-amd64\rclone.exe -Destination .\bin\rclone.exe
 }
@@ -731,7 +732,7 @@ if ([int]$osVer -ge 10) {
     New-Item -Path ".\temp\Edge" -ItemType "directory" -ErrorAction SilentlyContinue
     $isEdgeProviderExist = Test-Path -Path "$mountDir\Windows\System32\Dism\EdgeProvider.dll"
     if (!$isEdgeProviderExist) {
-        Invoke-Aria2Download -Uri "$Server/d/pxy/System/Windows/Win10/Res/EdgeProvider/26100_$osArch.zip" -Destination ".\temp\Edge" -Name "EdgeProvider.zip"
+        Invoke-Aria2Download -Uri "$Server/d/gslb/mupan/EdgeProvider_XR/26100_$osArch.zip" -Destination ".\temp\Edge" -Name "EdgeProvider.zip"
         Expand-Archive -Path ".\temp\Edge\EdgeProvider.zip" -DestinationPath ".\temp\Edge" -Force
         Rename-Item -Path "$mountDir\Windows\System32\Dism\DismProv.dll" -NewName "DismProv.dll.bak" -Force
         Copy-Item -Path ".\temp\Edge\EdgeProvider.dll" -Destination "$mountDir\Windows\System32\Dism\EdgeProvider.dll" -Force
@@ -915,7 +916,7 @@ $stream.Close(); $md5.Dispose(); $sha256.Dispose()
         "byte"     = $sysFileByte
         "md5"      = $sysFileMD5
         "sha256"   = $sysFileSHA256
-        "url"      = "$Server/d/pxy/Xiaoran%20Studio/System/Nightly/$sysDate/$sysFile.esd"
+        "url"      = "$Server/d/gslb/zhipin/System/Nightly/$sysDate/$sysFile.esd"
     }
     "os"  = @{
         "arch"    = $osArch
