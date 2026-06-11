@@ -1,4 +1,4 @@
-name: 自动批量制作潇然系统
+name: 自动批量制作鹅鹅鹅系统
 on:
   workflow_dispatch:
   # schedule:

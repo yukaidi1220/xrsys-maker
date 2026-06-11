@@ -2,7 +2,7 @@
 @echo off
 setlocal enabledelayedexpansion
 color a
-title 潇然系统部署手动离线接管程序 - V2026.5.25.0
+title 鹅鹅鹅系统部署手动离线接管程序 - V2026.5.25.0
 cd /d "%~dp0"
 set silent=0
 

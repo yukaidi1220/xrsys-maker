@@ -1,6 +1,6 @@
-# 潇然系统制作器
+# 鹅鹅鹅系统制作器
 
-构建完整接管部署的潇然系统。支持通过 Github Actions 自动化构建每夜版潇然系统镜像文件。
+构建完整接管部署的鹅鹅鹅系统。支持通过 Github Actions 自动化构建每夜版鹅鹅鹅系统镜像文件。
 
 获取成品：https://sys.xrgzs.top/get/nightly
 
@@ -8,15 +8,15 @@
 
 1. 下载以下文件：
 
-   - `osc.exe`：潇然系统优化组件
+   - `osc.exe`：鹅鹅鹅系统优化组件
 
-   - `MSVCRedist.AIO.exe`：潇然系统常用运行库
+   - `MSVCRedist.AIO.exe`：鹅鹅鹅系统常用运行库
 
-   - `unattend.xml`：潇然系统无人值守文件
+   - `unattend.xml`：鹅鹅鹅系统无人值守文件
 
-   - `injectdeploy.bat`：潇然系统部署接管脚本
+   - `injectdeploy.bat`：鹅鹅鹅系统部署接管脚本
 
-   - `injectdeploy.zip`：潇然系统文件结构模板，直接解压到当前目录后删掉
+   - `injectdeploy.zip`：鹅鹅鹅系统文件结构模板，直接解压到当前目录后删掉
 
 2. 还原/挂载系统镜像
 
@@ -30,9 +30,9 @@
 
 
 3. 最高权限运行 `injectdeploy.bat`，按照脚本提示，接管系统部署即可
-4. 重启或卸载提交镜像，即可获得完整状态的潇然系统
+4. 重启或卸载提交镜像，即可获得完整状态的鹅鹅鹅系统
 
 备注：
 
-- 使用潇然一键装机助理在线重装的潇然系统并未完整接管系统部署，恢复完毕重启前可将`injectdeploy.bat` 和`injectdeploy.zip` 解压放入系统盘并执行，可实现完整接管部署
+- 使用鹅鹅鹅一键装机助理在线重装的鹅鹅鹅系统并未完整接管系统部署，恢复完毕重启前可将`injectdeploy.bat` 和`injectdeploy.zip` 解压放入系统盘并执行，可实现完整接管部署
 

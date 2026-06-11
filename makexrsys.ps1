@@ -1,7 +1,7 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-Xiaoran System Image Builder
+EEEOS Image Builder
 
 .DESCRIPTION
 Build Windows image file with xrsys-osc, drivers and custom configurations.
@@ -22,9 +22,9 @@ $ErrorActionPreference = 'Stop'
 $Server = "https://res.yukaidi.top"
 $xrServer = "https://list.xrgzs.top"
 $MSUpdate_URL = "$Server/d/gslb/mupan/System_MSUpdate"
-$Driver_URL = "$Server/d/gslb/mupan/"
+$Driver_URL = "$Server/d/gslb/mupan"
 $Tools_URL = "$Server/d/gslb/mupan/Tools_XR"
-$Software_URL = "$xrServer/d/pxy/Software"
+$Software_URL = "$Server/d/gslb/mupan"
 $OSC_URL = "https://github.com/yukaidi1220/xrsys-maker/releases/download/OSC_URL/osc.exe"
 $rclone_build_point = "zhipin:/File/System"
 
@@ -353,8 +353,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win11_26H1_Pro_ARM64_CN_Full"
-        $sysVerCN = "潇然系统_Win11_26H1_专业_ARM64_完整"
+        $sysVer = "EEEOS_Win11_26H1_Pro_ARM64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_26H1_专业_ARM64_完整"
     }
     "w1126h164" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/26H1/latest_x64.json"
@@ -365,8 +365,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win11_26H1_Pro_x64_CN_Full"
-        $sysVerCN = "潇然系统_Win11_26H1_专业_x64_完整"
+        $sysVer = "EEEOS_Win11_26H1_Pro_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_26H1_专业_x64_完整"
     }
     "w1125h2a64" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/25H2/latest_arm64.json"
@@ -377,8 +377,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win11_25H2_Pro_ARM64_CN_Full"
-        $sysVerCN = "潇然系统_Win11_25H2_专业_ARM64_完整"
+        $sysVer = "EEEOS_Win11_25H2_Pro_ARM64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_25H2_专业_ARM64_完整"
     }
     "w1125h264" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/25H2/latest_x64.json"
@@ -389,8 +389,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win11_25H2_Pro_x64_CN_Full"
-        $sysVerCN = "潇然系统_Win11_25H2_专业_x64_完整"
+        $sysVer = "EEEOS_Win11_25H2_Pro_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_25H2_专业_x64_完整"
     }
     "w1123h2a64" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/23H2/latest_arm64.json"
@@ -401,11 +401,11 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win11_23H2_Pro_ARM64_CN_Full"
-        $sysVerCN = "潇然系统_Win11_23H2_专业_ARM64_完整"
+        $sysVer = "EEEOS_Win11_23H2_Pro_ARM64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_23H2_专业_ARM64_完整"
     }
     "w1123h264" {
-        # $obj = Get-OsBySearch -Path "/潇然工作室/System/Win11" -Search "MSUpdate_Win11_23H2*.esd"
+        # $obj = Get-OsBySearch -Path "/鹅鹅鹅/System/Win11" -Search "MSUpdate_Win11_23H2*.esd"
         # $osUrl = $obj.osurl
         # $osFile = $obj.osfile
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/23H2/latest_x64.json"
@@ -416,11 +416,11 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win11_23H2_Pro_x64_CN_Full"
-        $sysVerCN = "潇然系统_Win11_23H2_专业_x64_完整"
+        $sysVer = "EEEOS_Win11_23H2_Pro_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_23H2_专业_x64_完整"
     }
     "w1022h264" {
-        # $obj = Get-OsBySearch -Path "/潇然工作室/System/Win10" -Search "MSUpdate_Win10_22H2*.esd"
+        # $obj = Get-OsBySearch -Path "/鹅鹅鹅/System/Win10" -Search "MSUpdate_Win10_22H2*.esd"
         # $osUrl = $obj.osurl
         # $osFile = $obj.osfile
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/22H2/latest_x64.json"
@@ -431,8 +431,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win10_22H2_Pro_x64_CN_Full"
-        $sysVerCN = "潇然系统_Win10_22H2_专业_x64_完整"
+        $sysVer = "EEEOS_Win10_22H2_Pro_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win10_22H2_专业_x64_完整"
     }
     "w11lt2464" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/LTSC2024/latest_x64.json"
@@ -443,8 +443,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win11_LTSC2024_EntS_x64_CN_Full"
-        $sysVerCN = "潇然系统_Win11_LTSC2024_企业S_x64_完整"
+        $sysVer = "EEEOS_Win11_LTSC2024_EntS_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_LTSC2024_企业S_x64_完整"
     }
     "w11lt24a64" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/LTSC2024/latest_arm64.json"
@@ -455,8 +455,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win11_LTSC2024_EntS_ARM64_CN_Full"
-        $sysVerCN = "潇然系统_Win11_LTSC2024_企业S_ARM64_完整"
+        $sysVer = "EEEOS_Win11_LTSC2024_EntS_ARM64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_LTSC2024_企业S_ARM64_完整"
     }
     "w10lt2164" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/LTSC2021/latest_x64.json"
@@ -467,8 +467,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win10_LTSC2021_EntS_x64_CN_Full"
-        $sysVerCN = "潇然系统_Win10_LTSC2021_企业S_x64_完整"
+        $sysVer = "EEEOS_Win10_LTSC2021_EntS_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win10_LTSC2021_企业S_x64_完整"
     }
     "w10lt1964" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/LTSC2019/latest_x64.json"
@@ -479,8 +479,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win10_LTSC2019_EntS_x64_CN_Full"
-        $sysVerCN = "潇然系统_Win10_LTSC2019_企业S_x64_完整"
+        $sysVer = "EEEOS_Win10_LTSC2019_EntS_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win10_LTSC2019_企业S_x64_完整"
     }
     "w10lt1664" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/10/LTSB2016/latest_x64.json"
@@ -491,8 +491,8 @@ switch ($Target) {
         $osVer = $obj.os_ver
         $osVersion = $obj.os_version
         $osArch = $obj.os_arch
-        $sysVer = "XRSYS_Win10_LTSB2016_EntS_x64_CN_Full"
-        $sysVerCN = "潇然系统_Win10_LTSB2016_企业S_x64_完整"
+        $sysVer = "EEEOS_Win10_LTSB2016_EntS_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win10_LTSB2016_企业S_x64_完整"
     }
     "w7ult64" {
         $obj = (Invoke-RestMethod https://c.xrgzs.top/OSList.json).'【更新】7_SP1_IE11_自选_64位_无驱动_原版无接管'
@@ -503,8 +503,8 @@ switch ($Target) {
         $osVer = '7'
         $osVersion = ($obj.osfile -split '_')[-2]
         $osArch = 'x64'
-        $sysVer = "XRSYS_Win7_SP1_Ult_x64_CN_Full"
-        $sysVerCN = "潇然系统_Win7_SP1_旗舰_x64_完整"
+        $sysVer = "EEEOS_Win7_SP1_Ult_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win7_SP1_旗舰_x64_完整"
         Invoke-WebRequest https://c.xrgzs.top/unattend/764bit.xml -OutFile .\unattend.xml
     }
     Default {
@@ -758,9 +758,9 @@ if ([int]$osVer -ge 10) {
     }
 } else {
     # add edge runtime Windows 8.1-
-    Invoke-Aria2Download -Uri "$Software_URL/Edge/109/MicrosoftEdge_X64_109.0.1518.78_Stable.exe" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\Edge" -Name "MicrosoftEdge_X64_109.0.1518.78_Stable.exe" -Big
+    Invoke-Aria2Download -Uri "$Software_URL/Edge_XR/109/MicrosoftEdge_X64_109.0.1518.78_Stable.exe" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\Edge" -Name "MicrosoftEdge_X64_109.0.1518.78_Stable.exe" -Big
     # add pwsh runtime Windows 8.1-
-    Invoke-Aria2Download -Uri "$Software_URL/PowerShell/PowerShell-7.2.24-win-x64.msi" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\PWSH" -Name "PowerShell-7.2.24-win-x64.msi" -Big
+    Invoke-Aria2Download -Uri "$Software_URL/PowerShell_XR/PowerShell-7.2.24-win-x64.msi" -Destination "$mountDir\Windows\Setup\Set\osc\runtime\PWSH" -Name "PowerShell-7.2.24-win-x64.msi" -Big
 }
 
 # add runtimes

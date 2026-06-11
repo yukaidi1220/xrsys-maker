@@ -1,5 +1,5 @@
-name: 制作潇然系统
-run-name: 制作潇然系统 ${{ inputs.target }}${{ inputs.fulldrv == true && ' - 完整驱动' || ' - 精简驱动' }}${{ inputs.latest == true && ' - 最新' || '' }}
+name: 制作鹅鹅鹅系统
+run-name: 制作鹅鹅鹅系统 ${{ inputs.target }}${{ inputs.fulldrv == true && ' - 完整驱动' || ' - 精简驱动' }}${{ inputs.latest == true && ' - 最新' || '' }}
 on:
   workflow_dispatch:
     inputs:
