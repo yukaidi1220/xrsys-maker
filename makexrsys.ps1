@@ -507,6 +507,30 @@ switch ($Target) {
         $sysVerCN = "鹅鹅鹅系统_Win7_SP1_旗舰_x64_完整"
         Invoke-WebRequest https://c.xrgzs.top/unattend/764bit.xml -OutFile .\unattend.xml
     }
+    "w1124h264" {
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/24H2/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/11/24H2/" + $obj.os_version + '/' + $obj.name
+        $osMd5 = $obj.hash.md5
+        $osFile = $obj.name
+        $osIndex = 4
+        $osVer = $obj.os_ver
+        $osVersion = $obj.os_version
+        $osArch = $obj.os_arch
+        $sysVer = "EEEOS_Win11_24H2_Pro_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_24H2_专业_x64_完整"
+    }
+    "w1121h264" {
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/21H2/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/11/21H2/" + $obj.os_version + '/' + $obj.name
+        $osMd5 = $obj.hash.md5
+        $osFile = $obj.name
+        $osIndex = 4
+        $osVer = $obj.os_ver
+        $osVersion = $obj.os_version
+        $osArch = $obj.os_arch
+        $sysVer = "EEEOS_Win11_21H2_Pro_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_21H2_专业_x64_完整"
+    }
     Default {
         Write-Error "未知版本。"
     }

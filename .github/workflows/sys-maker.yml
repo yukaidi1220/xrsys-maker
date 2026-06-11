@@ -8,18 +8,15 @@ on:
         required: true
         type: choice
         options:
-          - w1126h1a64
           - w1126h164
-          - w1125h2a64
           - w1125h264
-          - w1123h2a64
+          - w1124h264
           - w1123h264
+          - w1121h264
           - w1022h264
-          - w11lt24a64
           - w11lt2464
           - w10lt2164
           - w10lt1964
-          - w10lt1664
           - w7ult64
       fulldrv:
         description: "添加完整驱动"

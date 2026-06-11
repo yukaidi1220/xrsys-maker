@@ -13,32 +13,19 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - w1126h1a64
           - w1126h164
-          # - w1125h2a64
           - w1125h264
-          # - w1123h2a64
+          - w1124h264
           - w1123h264
+          - w1121h264
           - w1022h264
-          # - w11lt24a64
           - w11lt2464
           - w10lt2164
           - w10lt1964
-          - w10lt1664
           - w7ult64
         fulldrv:
           - true
           - false
-        # ARM64 不支持完整驱动
-        exclude:
-          - target: w1126h1a64
-            fulldrv: true
-          - target: w1125h2a64
-            fulldrv: true
-          - target: w1123h2a64
-            fulldrv: true
-          - target: w11lt24a64
-            fulldrv: true
     steps:
       - name: 检出仓库
         uses: actions/checkout@v6
