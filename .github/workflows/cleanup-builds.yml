@@ -1,0 +1,153 @@
+name: 清理历史构建版本
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "试运行模式（仅模拟，不实际删除）"
+        required: false
+        default: true
+        type: boolean
+      keep_days:
+        description: "保留天数（默认 30）"
+        required: false
+        default: "30"
+        type: string
+      keep_recent:
+        description: "保留最近 N 个日期目录（默认 3）"
+        required: false
+        default: "3"
+        type: string
+
+jobs:
+  cleanup:
+    runs-on: windows-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v6
+
+      - name: 获取 rclone 配置
+        uses: actions/checkout@v6
+        with:
+          repository: yukaidi1220/rclone-action
+          token: ${{ secrets.RCLONE_TOKEN }}
+          path: bin
+
+      - name: 执行版本保留清理
+        shell: pwsh
+        run: |
+          $remoteBase  = "zhipin:/File/System/Nightly"
+          $keepDays    = [int]"${{ inputs.keep_days }}"
+          $keepRecent  = [int]"${{ inputs.keep_recent }}"
+          $dryRun      = "${{ inputs.dry_run }}" -eq "true"
+          $today       = Get-Date
+
+          if ($dryRun) {
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host "  试运行模式 - 不会实际删除任何文件" -ForegroundColor Yellow
+            Write-Host "========================================" -ForegroundColor Yellow
+          }
+          Write-Host "保留策略: 最近 $keepDays 天 + 最近 $keepRecent 个日期目录 + JSON 指针引用文件"
+          Write-Host ""
+
+          # ── 1. 收集 latest JSON 指针引用的受保护文件 ──
+          Write-Host "── 1. 解析 latest JSON 指针 ──" -ForegroundColor Cyan
+          $protectedEntries = @{}   # Key = "dateDir/file.esd", Value = json pointer name
+
+          $latestJsons = (.\bin\rclone.exe lsf "$remoteBase" --include "*.json" --max-depth 1) -split "`n" |
+            Where-Object { $_ -and $_ -match '\.json$' }
+
+          foreach ($jsonName in $latestJsons) {
+            $jsonName = $jsonName.Trim()
+            if (-not $jsonName) { continue }
+            try {
+              $content  = .\bin\rclone.exe cat "${remoteBase}/${jsonName}" 2>$null
+              $jsonObj  = $content | ConvertFrom-Json
+              $fileName = $jsonObj.sys.file
+              $urlPath  = $jsonObj.sys.url
+              if ($urlPath -match '/Nightly/(\d{4}\.\d{2}\.\d{2})/') {
+                $dateDir = $Matches[1]
+                $key = "$dateDir/$fileName"
+                $protectedEntries[$key] = $jsonName
+                Write-Host "  [$jsonName] → $key" -ForegroundColor Gray
+              }
+            } catch {
+              Write-Host "  [$jsonName] 解析失败，跳过" -ForegroundColor DarkYellow
+            }
+          }
+          Write-Host "  共 $($protectedEntries.Count) 个受保护文件" -ForegroundColor Green
+          Write-Host ""
+
+          # ── 2. 列出并排序所有日期目录 ──
+          Write-Host "── 2. 扫描日期目录 ──" -ForegroundColor Cyan
+          $allDirs = (.\bin\rclone.exe lsf "$remoteBase" --dirs-only --max-depth 1) -split "`n" |
+            ForEach-Object { ($_ -replace '/$', '').Trim() } |
+            Where-Object { $_ -match '^\d{4}\.\d{2}\.\d{2}$' } |
+            Sort-Object -Descending
+
+          Write-Host "  共 $(${allDirs}.Count) 个日期目录" -ForegroundColor Green
+          Write-Host ""
+
+          # 最近 $keepRecent 个日期目录（无条件保留）
+          $recentDirList = @($allDirs | Select-Object -First $keepRecent)
+          $recentDirsSet = [System.Collections.Generic.HashSet[string]]::new(
+            [string[]]$recentDirList,
+            [System.StringComparer]::OrdinalIgnoreCase
+          )
+
+          # ── 3. 逐个判断保留 / 删除 ──
+          Write-Host "── 3. 执行清理 ──" -ForegroundColor Cyan
+          $keepCount   = 0
+          $deleteCount = 0
+
+          foreach ($dir in $allDirs) {
+            $dirDate = [datetime]::ParseExact($dir, 'yyyy.MM.dd', $null)
+            $ageDays = ($today - $dirDate).Days
+
+            # 规则 1：30 天以内 → 保留
+            if ($ageDays -le $keepDays) {
+              Write-Host "  [$dir] 保留 ($ageDays 天前，在 ${keepDays} 天内)" -ForegroundColor Green
+              $keepCount++
+              continue
+            }
+
+            # 规则 2：最近 3 个日期目录 → 保留
+            if ($recentDirsSet.Contains($dir)) {
+              Write-Host "  [$dir] 保留 (最近 $keepRecent 个日期目录之一)" -ForegroundColor Green
+              $keepCount++
+              continue
+            }
+
+            # 规则 3：JSON 指针引用 → 保留
+            $dirPrefix = "$dir/"
+            $protectedInDir = $protectedEntries.Keys | Where-Object { $_.StartsWith($dirPrefix) }
+            if (@($protectedInDir).Count -gt 0) {
+              Write-Host "  [$dir] 保留 (包含受保护文件):" -ForegroundColor Green
+              foreach ($pf in $protectedInDir) {
+                Write-Host "           $($pf -replace "^$([regex]::Escape($dirPrefix))", '') ← $($protectedEntries[$pf])" -ForegroundColor Gray
+              }
+              $keepCount++
+              continue
+            }
+
+            # 不满足任何保留条件 → 删除
+            if ($dryRun) {
+              Write-Host "  [$dir] 模拟删除 ($ageDays 天前，无保护文件)" -ForegroundColor DarkYellow
+            } else {
+              Write-Host "  [$dir] 删除中 ($ageDays 天前)..." -ForegroundColor Red -NoNewline
+              .\bin\rclone.exe purge "${remoteBase}/${dir}" --tpslimit 5
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host " 完成" -ForegroundColor Red
+              } else {
+                Write-Host " 失败 (exit $LASTEXITCODE)" -ForegroundColor DarkRed
+              }
+            }
+            $deleteCount++
+          }
+
+          # ── 4. 汇总 ──
+          Write-Host ""
+          Write-Host "========================================" -ForegroundColor Cyan
+          $action = if ($dryRun) { "模拟删除" } else { "删除" }
+          Write-Host "清理完成：保留 $keepCount 个，${action} $deleteCount 个" -ForegroundColor Yellow
+          Write-Host "========================================" -ForegroundColor Cyan
