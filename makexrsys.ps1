@@ -25,7 +25,7 @@ $MSUpdate_URL = "$Server/d/gslb/mupan/System_MSUpdate"
 $Driver_URL = "$Server/d/gslb/mupan"
 $Tools_URL = "$Server/d/gslb/mupan/Tools_XR"
 $Software_URL = "$Server/d/gslb/mupan"
-$OSC_URL = "https://github.com/yukaidi1220/xrsys-maker/releases/download/OSC_URL/osc.exe"
+$OSC_URL = "https://github.com/yukaidi1220/xrsys-osc/releases/latest/download/osc.exe"
 $rclone_build_point = "zhipin:/File/System"
 
 # wimlib 日志限速输出函数
@@ -639,6 +639,10 @@ Test-SHA256 @{
     ".\bin\wimlib-imagex.exe" = "401BF99D6DEC2B749B464183F71D146327AE0856A968C309955F71A0C398A348"
     ".\bin\libwim-15.dll"     = "6480B53D4ECD4423AF9E100FE15E3D2C3D114EFF33FBA07977E46C1AB124342E"
 }
+if (-not (Test-Path -Path ".\bin\osc.exe.md5")) {
+    Write-Host "未找到 osc.exe.md5，正在下载..."
+    Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-osc/releases/latest/download/osc.exe.md5' -OutFile ".\bin\osc.exe.md5"
+}
 if (-not (Test-Path -Path ".\bin\rclone.exe")) {
     Write-Host "未找到 rclone，正在下载..."
     Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/rclone-current-windows-amd64.zip' -outfile .\temp\rclone.zip
@@ -714,7 +718,10 @@ Write-Status -Step "释放镜像(wimlib apply)" -Status "完成"
 # inject deploy
 Write-Status -Step "注入部署文件" -Status "开始"
 Expand-Archive -Path ".\injectdeploy.zip" -DestinationPath "$mountDir" -Force
-Invoke-Aria2Download -Uri "$OSC_URL" -Destination $mountDir -Name "osc.exe"
+Invoke-Aria2Download -Uri "$OSC_URL" -Destination ".\bin" -Name "osc.exe"
+$oscMd5Expected = (Get-Content ".\bin\osc.exe.md5").Trim().Split(' ')[0].ToLower()
+Test-MD5 @{ ".\bin\osc.exe" = $oscMd5Expected }
+Copy-Item -Path ".\bin\osc.exe" -Destination "$mountDir\osc.exe" -Force
 Copy-Item -Path ".\injectdeploy.bat" -Destination "$mountDir" -Force
 if ($sysArch -eq "arm64") {
     Invoke-WebRequest "https://c.xrgzs.top/unattend/arm64.xml" -OutFile ".\unattend.xml"
