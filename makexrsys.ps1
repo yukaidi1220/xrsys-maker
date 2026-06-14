@@ -559,9 +559,9 @@ if ($FullDrv) {
 # dealosdriver
 if ($null -eq $osdrvurl) {
     if ($osArch -eq "x64" -and [float]$osVersion -ge 19041.0) {
-        $osdrvurl = "$Driver_URL/DriverPack_XR/NET/NET10x64.iso"
+        $osdrvurl = "$Driver_URL/DriverPack_XR/NET_Mod/NET10x64.iso"
     } elseif ($osArch -eq "arm64" -and [float]$osVersion -ge 19041.0) {
-        $osdrvurl = "$Driver_URL/DriverPack_XR/NET/NET10a64.iso"
+        $osdrvurl = "$Driver_URL/DriverPack_XR/NET_Mod/NET10a64.iso"
     } elseif ($osArch -eq "x64" -and [float]$osVersion -ge 10240.0) {
         $osdrvurl = "$Driver_URL/DriverPack_XR/DPWin10x64.iso"
     } elseif ($osArch -eq "x64" -and [float]$osVersion -ge 7600.0) {
