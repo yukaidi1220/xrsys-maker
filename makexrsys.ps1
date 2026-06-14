@@ -639,10 +639,8 @@ Test-SHA256 @{
     ".\bin\wimlib-imagex.exe" = "401BF99D6DEC2B749B464183F71D146327AE0856A968C309955F71A0C398A348"
     ".\bin\libwim-15.dll"     = "6480B53D4ECD4423AF9E100FE15E3D2C3D114EFF33FBA07977E46C1AB124342E"
 }
-if (-not (Test-Path -Path ".\bin\osc.exe.md5")) {
-    Write-Host "未找到 osc.exe.md5，正在下载..."
-    Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-osc/releases/latest/download/osc.exe.md5' -OutFile ".\bin\osc.exe.md5"
-}
+Write-Host "正在下载 osc.exe.md5..."
+Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-osc/releases/latest/download/osc.exe.md5' -OutFile ".\bin\osc.exe.md5"
 if (-not (Test-Path -Path ".\bin\rclone.exe")) {
     Write-Host "未找到 rclone，正在下载..."
     Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/rclone-current-windows-amd64.zip' -outfile .\temp\rclone.zip
