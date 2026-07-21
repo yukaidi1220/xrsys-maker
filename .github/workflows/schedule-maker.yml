@@ -29,12 +29,30 @@ jobs:
         env:
           FORCE: ${{ inputs.force }}
         run: |
-          command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq
+          # jq 缺失则尝试安装；安装失败也绝不中断（后续解析会安全降级为 ERR）
+          command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq >/dev/null 2>&1 || echo "  [警告] jq 安装失败，将尝试继续"
           BASE="https://res.yukaidi.top/d/gslb/mupan/System_MSUpdate"
           TARGETS="11/26H1 11/25H2 11/24H2 11/23H2 11/21H2 10/22H2 11/LTSC2024 10/LTSC2021 10/LTSB2016"
           SIG=""
           for t in $TARGETS; do
-            v=$(curl -fsS "$BASE/$t/latest_x64.json" | jq -r '.updver // .date // "ERR"')
+            tmpf=$(mktemp); codef=$(mktemp)
+            # -L 跟随重定向；--max-time 30 防卡死；-w 写出 HTTP 状态码到 codef（含 3xx/4xx/5xx）
+            if ! curl -fsSL --max-time 30 -o "$tmpf" -w "%{http_code}" "$BASE/$t/latest_x64.json" > "$codef" 2>/dev/null; then
+              http=$(cat "$codef" 2>/dev/null)
+              echo "  [跳过] $t 请求失败 (http=${http:-空})"
+              v="ERR"
+            else
+              http=$(cat "$codef")
+              if [ "$http" != "200" ]; then
+                echo "  [跳过] $t HTTP $http"
+                v="ERR"
+              else
+                # 200 但返回体可能不是合法 JSON（裸数字/HTML），解析失败则记 ERR
+                v=$(jq -r '.updver // .date // "ERR"' "$tmpf" 2>/dev/null) || true
+                [ -z "$v" ] && v="ERR"
+              fi
+            fi
+            rm -f "$tmpf" "$codef"
             SIG="${SIG}${t}=${v};"
           done
           echo "当前签名: $SIG"
@@ -48,12 +66,13 @@ jobs:
           if [ "$FORCE" = "true" ] || [ "$SIG" != "$OLD" ]; then
             SHOULD="true"
             echo "$SIG" > "$STATE"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com" || true
+            git config user.name "github-actions[bot]" || true
             git add "$STATE"
             if ! git diff --cached --quiet; then
-              git commit -m "nightly: 原版更新，签到状态 $(date +%F)"
-              git push origin "HEAD:${GITHUB_REF_NAME}"
+              git commit -m "nightly: 原版更新，签到状态 $(date +%F)" || echo "  [警告] 提交失败"
+              # 推送失败（并发运行抢占 / 分支保护 / 网络抖动）不影响本次构建判定
+              git push origin "HEAD:${GITHUB_REF_NAME:-main}" || echo "  [警告] 状态文件推送失败（可能被并发运行抢占），不影响本次构建判定"
             fi
           fi
           echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
