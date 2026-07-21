@@ -1,12 +1,15 @@
 name: 清理历史构建版本
 
 on:
+  schedule:
+    # 每周日北京时间 09:10（UTC 周日 01:10），对齐 MSUpdate
+    - cron: "10 1 * * 0"
   workflow_dispatch:
     inputs:
       dry_run:
         description: "试运行模式（仅模拟，不实际删除）"
         required: false
-        default: true
+        default: false
         type: boolean
       keep_days:
         description: "保留天数（默认 30）"
@@ -53,6 +56,7 @@ jobs:
           # ── 1. 收集 latest JSON 指针引用的受保护文件 ──
           Write-Host "── 1. 解析 latest JSON 指针 ──" -ForegroundColor Cyan
           $protectedEntries = @{}   # Key = "dateDir/file.esd", Value = json pointer name
+          $protectedDates   = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
           $latestJsons = (.\bin\rclone.exe lsf "$remoteBase" --include "*.json" --max-depth 1) -split "`n" |
             Where-Object { $_ -and $_ -match '\.json$' }
@@ -69,6 +73,7 @@ jobs:
                 $dateDir = $Matches[1]
                 $key = "$dateDir/$fileName"
                 $protectedEntries[$key] = $jsonName
+                if ($jsonObj.sys.date) { $protectedDates.Add($jsonObj.sys.date) | Out-Null }
                 Write-Host "  [$jsonName] → $key" -ForegroundColor Gray
               }
             } catch {
@@ -114,6 +119,13 @@ jobs:
             # 规则 2：最近 3 个日期目录 → 保留
             if ($recentDirsSet.Contains($dir)) {
               Write-Host "  [$dir] 保留 (最近 $keepRecent 个日期目录之一)" -ForegroundColor Green
+              $keepCount++
+              continue
+            }
+
+            # 规则 3b：latest 指针 sys.date 指向的日期目录 → 保留
+            if ($protectedDates.Contains($dir)) {
+              Write-Host "  [$dir] 保留 (最新指针 sys.date 指向)" -ForegroundColor Green
               $keepCount++
               continue
             }

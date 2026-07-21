@@ -1,14 +1,68 @@
 name: 自动批量制作鹅鹅鹅系统
+
 on:
+  schedule:
+    # 每日北京时间 03:00（UTC 19:00）检测原版更新
+    - cron: "0 19 * * *"
   workflow_dispatch:
-  # schedule:
-  #   # - cron: '0 0 * * *' # 每日构建
-  #   - cron: "0 0 * * 5" # 每周构建
+    inputs:
+      force:
+        description: "强制构建（忽略原版更新检测）"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
 
 jobs:
-  makexrsys:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.detect.outputs.should_build }}
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v6
+
+      - name: 检测原版更新
+        id: detect
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq
+          BASE="https://res.yukaidi.top/d/gslb/mupan/System_MSUpdate"
+          TARGETS="11/26H1 11/25H2 11/24H2 11/23H2 11/21H2 10/22H2 11/LTSC2024 10/LTSC2021 10/LTSB2016"
+          SIG=""
+          for t in $TARGETS; do
+            v=$(curl -fsS "$BASE/$t/latest_x64.json" | jq -r '.updver // .date // "ERR"')
+            SIG="${SIG}${t}=${v};"
+          done
+          echo "当前签名: $SIG"
+
+          STATE=".github/nightly-state.txt"
+          OLD=""
+          if [ -f "$STATE" ]; then OLD=$(cat "$STATE"); fi
+          echo "历史签名: $OLD"
+
+          SHOULD="false"
+          if [ "$FORCE" = "true" ] || [ "$SIG" != "$OLD" ]; then
+            SHOULD="true"
+            echo "$SIG" > "$STATE"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git add "$STATE"
+            if ! git diff --cached --quiet; then
+              git commit -m "nightly: 原版更新，签到状态 $(date +%F)"
+              git push origin "HEAD:${GITHUB_REF_NAME}"
+            fi
+          fi
+          echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
+          echo "应构建: $SHOULD"
+
+  build:
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
     runs-on: windows-latest
-    name: ${{ matrix.target }}${{ matrix.fulldrv == true && '-完整驱动' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -22,10 +76,10 @@ jobs:
           - w11lt2464
           - w10lt2164
           - w10lt1964
-          - w7ult64
         fulldrv:
-          - true
           - false
+          - true
+    name: ${{ matrix.target }}${{ matrix.fulldrv == true && '-完整驱动' || '' }}
     steps:
       - name: 检出仓库
         uses: actions/checkout@v6
@@ -40,10 +94,9 @@ jobs:
       - name: 执行构建任务
         shell: pwsh
         run: |
-          # 安装 gsudo
           Invoke-WebRequest -Uri "https://github.com/gerardog/gsudo/releases/download/v2.6.1/gsudo.portable.zip" -OutFile "gsudo.zip"
           Expand-Archive -Path "gsudo.zip" -DestinationPath "gsudo"
           $env:Path = "$PWD\gsudo\x64;$env:Path"
           Import-Module "$PWD\gsudo\x64\gsudoModule.psm1"
 
-          gsudo --ti .\makexrsys.ps1 -Target "${{ matrix.target }}" -Latest ${{ matrix.fulldrv == true && '-FullDrv' || '' }}
+          gsudo --ti .\makexrsys.ps1 -Target "${{ matrix.target }}"${{ matrix.fulldrv == true && ' -FullDrv' || '' }} -Latest
