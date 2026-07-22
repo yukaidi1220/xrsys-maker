@@ -2,8 +2,8 @@ name: 自动批量制作鹅鹅鹅系统
 
 on:
   schedule:
-    # 每日北京时间 03:00（UTC 19:00）检测原版更新
-    - cron: "0 19 * * *"
+    # 每日北京时间 00:00（UTC 16:00）检测原版更新
+    - cron: "0 16 * * *"
   workflow_dispatch:
     inputs:
       force:
