@@ -643,9 +643,7 @@ Write-Host "正在下载 osc.exe.md5..."
 Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-osc/releases/latest/download/osc.exe.md5' -OutFile ".\bin\osc.exe.md5"
 if (-not (Test-Path -Path ".\bin\rclone.exe")) {
     Write-Host "未找到 rclone，正在下载..."
-    Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/rclone-current-windows-amd64.zip' -outfile .\temp\rclone.zip
-    Expand-Archive -Path .\temp\rclone.zip -DestinationPath .\temp\ -Force
-    Copy-Item -Path .\temp\rclone-*-windows-amd64\rclone.exe -Destination .\bin\rclone.exe
+    Invoke-WebRequest -Uri 'https://github.com/yukaidi1220/rclone/releases/latest/download/rclone-cdn-windows-amd64.exe' -OutFile .\bin\rclone.exe
 }
 
 Write-Host "正在下载原版系统镜像..."

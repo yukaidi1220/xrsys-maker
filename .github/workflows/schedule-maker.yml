@@ -1,18 +1,17 @@
 name: 自动批量制作鹅鹅鹅系统
 
-# [已临时禁用] 恢复时取消下方注释并删除 on: []
-on: []
-# on:
-#   schedule:
-#     # 每日北京时间 00:00（UTC 16:00）检测原版更新
-#     - cron: "0 16 * * *"
-#   workflow_dispatch:
-#     inputs:
-#       force:
-#         description: "强制构建（忽略原版更新检测）"
-#         required: false
-#         default: false
-#         type: boolean
+# [已临时禁用] 仅保留手动触发；恢复定时只需取消下方 schedule 注释
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "强制构建（忽略原版更新检测）"
+        required: false
+        default: false
+        type: boolean
+  # schedule:
+  #   # 每日北京时间 00:00（UTC 16:00）检测原版更新
+  #   - cron: "0 16 * * *"
 
 permissions:
   contents: write
@@ -111,6 +110,11 @@ jobs:
           repository: yukaidi1220/rclone-action
           token: ${{ secrets.RCLONE_TOKEN }}
           path: bin
+
+      - name: 下载 rclone
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/yukaidi1220/rclone/releases/latest/download/rclone-cdn-windows-amd64.exe" -OutFile "bin/rclone.exe"
 
       - name: 执行构建任务
         shell: pwsh

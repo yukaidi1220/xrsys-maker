@@ -43,6 +43,11 @@ jobs:
           token: ${{ secrets.RCLONE_TOKEN }}
           path: bin
 
+      - name: 下载 rclone
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/yukaidi1220/rclone/releases/latest/download/rclone-cdn-windows-amd64.exe" -OutFile "bin/rclone.exe"
+
       - name: 执行构建任务
         shell: pwsh
         run: |
