@@ -1,16 +1,18 @@
 name: 自动批量制作鹅鹅鹅系统
 
-on:
-  schedule:
-    # 每日北京时间 00:00（UTC 16:00）检测原版更新
-    - cron: "0 16 * * *"
-  workflow_dispatch:
-    inputs:
-      force:
-        description: "强制构建（忽略原版更新检测）"
-        required: false
-        default: false
-        type: boolean
+# [已临时禁用] 恢复时取消下方注释并删除 on: []
+on: []
+# on:
+#   schedule:
+#     # 每日北京时间 00:00（UTC 16:00）检测原版更新
+#     - cron: "0 16 * * *"
+#   workflow_dispatch:
+#     inputs:
+#       force:
+#         description: "强制构建（忽略原版更新检测）"
+#         required: false
+#         default: false
+#         type: boolean
 
 permissions:
   contents: write
