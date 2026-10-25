@@ -71,9 +71,27 @@ jobs:
       - name: 下载 ESD
         shell: pwsh
         run: |
-          curl.exe -L --retry 3 --connect-timeout 20 -o image.esd "$env:ESD_URL"
+          # aria2c 16 连接下载；res.yukaidi.top 的 302 目标是签名直链，
+          # 先解析出最终 URL 再交给 aria2（参考 makexrsys.ps1）
+          if (-not (Test-Path .\bin\aria2c.exe)) {
+            Invoke-WebRequest -Uri "https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/aria2-1.37.0-win-64bit-build1.zip" -OutFile aria2.zip
+            Expand-Archive aria2.zip -DestinationPath temp-aria2 -Force
+            Move-Item "temp-aria2\aria2-1.37.0-win-64bit-build1\aria2c.exe" .\bin\ -Force
+          }
+          $finalUrl = $env:ESD_URL
+          try {
+            $req = [System.Net.WebRequest]::Create($env:ESD_URL)
+            $req.AllowAutoRedirect = $false
+            $res = $req.GetResponse()
+            $loc = $res.GetResponseHeader('Location'); $res.Close()
+            if ($loc) { $finalUrl = $loc }
+          } catch { }
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          & .\bin\aria2c.exe --no-conf=true --continue --allow-overwrite=true --summary-interval=0 `
+            --remote-time=true --retry-wait=5 --check-certificate=false -x16 -s16 "$finalUrl" -o image.esd
+          if ($LASTEXITCODE -ne 0) { Write-Error "aria2 下载失败（exit $LASTEXITCODE）" }
           if ((Get-Item image.esd).Length -lt 100MB) { Write-Error "ESD 下载异常（$((Get-Item image.esd).Length) 字节）" }
-          "ESD 大小: $([math]::Round((Get-Item image.esd).Length / 1GB, 2)) GiB"
+          "ESD 大小: $([math]::Round((Get-Item image.esd).Length / 1GB, 2)) GiB，耗时 $([int]$sw.Elapsed.TotalSeconds)s"
 
       - name: 建测试盘（GPT + EFI + MSR + 主分区）
         shell: pwsh
