@@ -424,6 +424,8 @@ jobs:
           if ($latestLog) { "$($latestLog.Name)："; Get-Content $latestLog.FullName -Tail 8 }
           if ($verdict -eq "frozen") { Write-Error "判定为卡死（主画面与时钟带均静止），开机失败" }
           if ($verdict -eq "timeout" -and $kept -eq 0) { Write-Error "超时且无任何截图，开机失败" }
+          # 等被杀的 QEMU 真正退出（大 VHDX 写回缓存冲刷可达数十秒），否则取证挂载必失败
+          if ($p -and -not $p.HasExited) { Wait-Process -Id $p.Id -Timeout 90 -ErrorAction SilentlyContinue }
 
       - name: 赛后取证（minidump / Panther / 事件日志）
         if: always()
