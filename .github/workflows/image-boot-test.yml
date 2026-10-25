@@ -349,8 +349,10 @@ jobs:
             return $false
           }
 
-          # 双区域判定：主画面（上部 h-2 行）静止 + 时钟带（底部 2 行）在 ~75 秒窗口内
-          # 跳变过 → 判"桌面空闲"结束；主画面静止但时钟带也死寂 → 判"卡死"失败。
+          # 双区域判定：主画面（去掉任务栏条的上部）静止 + 右下角时钟区（角落矩形）在
+          # 稳定期跳变 → 判"桌面空闲"；主画面静止但角落也死寂 → 判"卡死"。
+          # 分区依据实测（shot-0125 量得）：任务栏顶 y=753 高 47px，时钟右下角右对齐。
+          # 用角落而非全宽底条：固件加载转圈在底部居中，全宽会把它误判成时钟走动。
           # PPM(P6) 头部逐 token 解析后对两个区域分别取 MD5。
           function Get-PpmHashes([string]$path) {
             $bytes = [IO.File]::ReadAllBytes($path)
@@ -364,11 +366,20 @@ jobs:
             }
             if ($nums.Count -lt 2) { return $null }
             $rowBytes = $nums[0] * 3
-            $mainEnd = $i + ($nums[1] - 2) * $rowBytes
+            $stripRows = 56        # 任务栏条高（47px 实测 + 余量）
+            $cornerPx = 300        # 右下角时钟区宽
+            $mainEnd = $i + ($nums[1] - $stripRows) * $rowBytes
             if ($mainEnd -ge $bytes.Length) { return $null }
             $md5 = [Security.Cryptography.MD5]::Create()
             $main = [BitConverter]::ToString($md5.ComputeHash($bytes, $i, $mainEnd - $i))
-            $band = [BitConverter]::ToString($md5.ComputeHash($bytes, $mainEnd, $bytes.Length - $mainEnd))
+            $xStart = ($nums[0] - $cornerPx) * 3
+            $bandArr = New-Object byte[] ($stripRows * $cornerPx * 3)
+            $pos = 0
+            for ($r = 0; $r -lt $stripRows; $r++) {
+              [Array]::Copy($bytes, ($mainEnd + $r * $rowBytes + $xStart), $bandArr, $pos, ($cornerPx * 3))
+              $pos += $cornerPx * 3
+            }
+            $band = [BitConverter]::ToString($md5.ComputeHash($bandArr))
             return "$main|$band"
           }
 
@@ -386,8 +397,8 @@ jobs:
                 } else {
                   Remove-Item $shot -Force -ErrorAction SilentlyContinue
                 }
-                # 时钟跳变必须发生在"主画面已稳定期间"（null→首值的跳变不算，
-                # 否则 UEFI logo 静止 30 秒就会被误判成桌面——第 9 次运行实测踩过）
+                # 时钟跳变必须发生在"主画面已稳定期间"（null→首值的跳变不算）。
+                # frozen 放宽到 300 秒：部署长尾统计数字偶有 2 分钟不动，150 秒会误杀绿局
                 if ($main -eq $lastMain) {
                   $mainSame++
                   if ($band -ne $lastBand) { $bandTickInStable = $true }
@@ -396,7 +407,7 @@ jobs:
                 }
                 $lastMain = $main; $lastBand = $band
                 if ($mainSame -ge 10 -and $bandTickInStable) { $verdict = "desktop"; break }
-                if ($mainSame -ge 50 -and -not $bandTickInStable) { $verdict = "frozen"; break }
+                if ($mainSame -ge 100 -and -not $bandTickInStable) { $verdict = "frozen"; break }
               } else {
                 Remove-Item $shot -Force -ErrorAction SilentlyContinue
               }
