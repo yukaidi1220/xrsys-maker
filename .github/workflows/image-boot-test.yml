@@ -180,22 +180,29 @@ jobs:
           $cpuModel = "${{ inputs.cpu_model }}".Trim()
           if ($cpuModel) { $argString += " -cpu $cpuModel" }
           "QEMU 参数: $argString"
-          $p = Start-Process qemu-system-x86_64.exe -ArgumentList $argString -PassThru -NoNewWindow -RedirectStandardError qemu-stderr.log
-          Start-Sleep -Seconds 8
-          if ($p.HasExited) {
-            "QEMU 秒退，stderr："
-            Get-Content qemu-stderr.log -ErrorAction SilentlyContinue | Select-Object -First 10
-            Write-Error "QEMU 未能启动"
-          }
-          "QEMU 已启动（WHPX→TCG 自动回退），PID $($p.Id)"
-
-          # QMP 客户端：连一次，循环发 screendump
-          $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 4444)
-          $stream = $client.GetStream()
-          $reader = New-Object System.IO.StreamReader($stream)
-          $writer = New-Object System.IO.StreamWriter($stream); $writer.AutoFlush = $true
-          $null = $reader.ReadLine()                                    # greeting
-          $writer.WriteLine('{"execute":"qmp_capabilities"}'); $null = $reader.ReadLine()
+          # 客户机部署流程收尾会自动重启（TCG 长跑实测）。WHPX 后端恰好在客户机
+          # 重置路径上崩（xsave / VP exit 4，实测崩溃时点=桌面阶段结束转黑瞬间），
+          # 所以加 -no-reboot：客户机一重启 QEMU 就干净退出，外层重新拉起二_boot。
+          $argString += " -no-reboot"
+          $limit = (Get-Date).AddMinutes(${{ inputs.run_minutes }})
+          $i = 0; $kept = 0; $verdict = "timeout"
+          $lastMain = $null; $lastBand = $null; $mainSame = 0; $bandTickInStable = $false
+          for ($bootRound = 1; $bootRound -le 3 -and $verdict -eq "timeout"; $bootRound++) {
+            $stderrFile = "qemu-stderr-$bootRound.log"
+            $p = Start-Process qemu-system-x86_64.exe -ArgumentList $argString -PassThru -NoNewWindow -RedirectStandardError $stderrFile
+            Start-Sleep -Seconds 8
+            if ($p.HasExited) {
+              "第 $bootRound 次启动秒退，stderr："
+              Get-Content $stderrFile -ErrorAction SilentlyContinue | Select-Object -First 10
+              Write-Error "QEMU 未能启动"
+            }
+            "── 第 $bootRound 次开机，PID $($p.Id) ──"
+            $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 4444)
+            $stream = $client.GetStream()
+            $reader = New-Object System.IO.StreamReader($stream)
+            $writer = New-Object System.IO.StreamWriter($stream); $writer.AutoFlush = $true
+            $null = $reader.ReadLine()                                    # greeting
+            $writer.WriteLine('{"execute":"qmp_capabilities"}'); $null = $reader.ReadLine()
 
           function Wait-QmpReturn($reader) {
             $deadline = (Get-Date).AddSeconds(15)
@@ -231,9 +238,6 @@ jobs:
             return "$main|$band"
           }
 
-          $limit = (Get-Date).AddMinutes(${{ inputs.run_minutes }})
-          $i = 0; $kept = 0; $verdict = "timeout"
-          $lastMain = $null; $lastBand = $null; $mainSame = 0; $bandTickInStable = $false
           while ((Get-Date) -lt $limit -and -not $p.HasExited) {
             $i++
             $shot = "shot-{0:d4}.ppm" -f $i
@@ -265,12 +269,20 @@ jobs:
             }
             Start-Sleep -Seconds 3
           }
+            if ($p.HasExited) {
+              "第 $bootRound 次开机结束：客户机重启/关机，QEMU 已退出（exit $($p.ExitCode)）"
+            }
+            $client.Close()
+            if ($verdict -ne "timeout" -or (Get-Date) -ge $limit) { break }
+            if ($bootRound -lt 3) { "5 秒后重新拉起 QEMU 进行下一次开机..." }
+            Start-Sleep -Seconds 5
+          }
           "截图 $i 张，保留 $kept 张，判定: $verdict"
           "verdict=$verdict" | Out-File verdict.txt -Encoding utf8
-          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
-          $client.Close()
-          "── qemu stderr 末尾 ──"
-          Get-Content qemu-stderr.log -Tail 8 -ErrorAction SilentlyContinue
+          if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          "── qemu stderr 末尾（最新一轮） ──"
+          $latestLog = Get-ChildItem qemu-stderr-*.log -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
+          if ($latestLog) { "$($latestLog.Name)："; Get-Content $latestLog.FullName -Tail 8 }
           if ($verdict -eq "frozen") { Write-Error "判定为卡死（主画面与时钟带均静止），开机失败" }
           if ($verdict -eq "timeout" -and $kept -eq 0) { Write-Error "超时且无任何截图，开机失败" }
 
@@ -281,5 +293,6 @@ jobs:
           name: boot-shots-${{ inputs.image_index }}
           path: |
             shots/
-            qemu-stderr.log
+            qemu-stderr-*.log
+            verdict.txt
           retention-days: 7
