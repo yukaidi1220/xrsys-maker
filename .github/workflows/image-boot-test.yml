@@ -534,14 +534,26 @@ jobs:
           detach vdisk
           "@
           try {
-            # QEMU 刚被 Stop-Process、文件句柄可能未释放：先清残留进程，挂载失败重试 3 次
+            # QEMU 刚被 Stop-Process、文件句柄可能未释放：先清残留进程，挂载失败重试 3 次。
+            # diskpart 输出必须留痕（fixed VHDX 被拒时要知道具体原因），失败后再用
+            # Mount-DiskImage（挂载栈不同）兜底
             Get-Process qemu-system-x86_64 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             $attached = $false
             foreach ($try in 1..3) {
-              $attach | diskpart.exe | Out-Null
+              $dpOut = $attach | diskpart.exe 2>&1 | Out-String
               Start-Sleep -Seconds 6
               if (Get-Disk | Where-Object { $_.BusType -eq 'File Backed Virtual' }) { $attached = $true; break }
-              "第 $try 次挂载后未见 VHDX 磁盘，重试..."
+              "第 $try 次挂载后未见 VHDX 磁盘，diskpart 输出："
+              ($dpOut -split "`r?`n" | Where-Object { $_ -match '\S' -and $_ -notmatch '^Microsoft|^Copyright|DISKPART>' }) -join "`n"
+              Start-Sleep -Seconds 3
+            }
+            if (-not $attached) {
+              "diskpart 三连败，改用 Mount-DiskImage 兜底..."
+              try {
+                Mount-DiskImage -ImagePath "$PWD\$vfile" -ErrorAction Stop | Out-Null
+                Start-Sleep -Seconds 6
+                if (Get-Disk | Where-Object { $_.BusType -eq 'File Backed Virtual' -or ($_.BusType -eq 'Unknown' -and (Get-DiskImage -ImagePath "$PWD\$vfile").Attached) }) { $attached = $true; "Mount-DiskImage 挂载成功" }
+              } catch { "Mount-DiskImage 也失败: $($_.Exception.Message)" }
             }
             if (-not $attached) { "取证跳过：VHDX 挂载失败（句柄占用或盘异常）" }
             $vdiskDisk = Get-Disk | Where-Object { $_.BusType -eq 'File Backed Virtual' } | Select-Object -First 1
@@ -595,6 +607,7 @@ jobs:
             "取证整体异常（不影响判定）: $($_.Exception.Message)"
           } finally {
             try { $detach | diskpart.exe | Out-Null } catch {}
+            try { Dismount-DiskImage -ImagePath "$PWD\$vfile" -ErrorAction Stop | Out-Null } catch {}
           }
 
       - name: 打包上传（视频，单独 artifact，名带 run id）
