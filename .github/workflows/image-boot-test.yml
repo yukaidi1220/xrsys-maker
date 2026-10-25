@@ -59,6 +59,10 @@ on:
         description: "网卡型号（e1000=现状；none=去掉网卡排除变量，部署离线不需要）"
         required: false
         default: "e1000"
+      bcdboot:
+        description: "写引导用的 bcdboot（host=宿主机版本，会用宿主 EFI 文件有缝合风险；image=镜像自带版本）"
+        required: false
+        default: "host"
   schedule:
     # 每天抽查一次默认目标（2026-10-25 全链验证通过后启用；01:40 CST）
     - cron: "40 17 * * *"
@@ -183,8 +187,14 @@ jobs:
           # 不影响引导，bootx64 回退路径一直正常）。此块仅探测留痕。
           $exDst = "V:\Windows\boot\EFI_EX\bootmgfw_EX.efi"
           if (Test-Path $exDst) { "补位跳过（$exDst 已存在，60 次重试为 bcdboot 固有噪音）" } else { "::warning::$exDst 不存在（罕见）" }
-          $bcd = "C:\Windows\System32\bcdboot.exe"
-          if (-not (Test-Path $bcd)) { $bcd = "V:\Windows\System32\bcdboot.exe" }
+          if ("${{ inputs.bcdboot }}" -eq "image") {
+            # 镜像自带 bcdboot：保证引导文件与镜像同源（宿主版本会混入宿主 EFI 文件）
+            $bcd = "V:\Windows\System32\bcdboot.exe"
+            if (-not (Test-Path $bcd)) { Write-Error "镜像内无 bcdboot.exe" }
+          } else {
+            $bcd = "C:\Windows\System32\bcdboot.exe"
+            if (-not (Test-Path $bcd)) { $bcd = "V:\Windows\System32\bcdboot.exe" }
+          }
           "使用: $bcd"
           & $bcd V:\Windows /s Y: /f UEFI /v
           if ($LASTEXITCODE -ne 0) { Write-Error "bcdboot 失败（exit $LASTEXITCODE）" }
@@ -210,6 +220,16 @@ jobs:
           $enum | ForEach-Object { "$_" }
           if (-not (($enum -join "`n") -match 'winload\.efi')) {
             Write-Error "引导校验失败：BCD default 项未指向 winload.efi（引导未真正创建）"
+          }
+          # 溯源：ESP 上的引导文件到底是镜像版还是宿主机版（MD5 三方对比）
+          "── 引导文件溯源 ──"
+          foreach ($f in @(
+            "Y:\EFI\Microsoft\Boot\bootmgfw.efi", "Y:\EFI\Boot\bootx64.efi",
+            "V:\Windows\boot\EFI_EX\bootmgfw_EX.efi", "V:\Windows\boot\EFI_EX\bootx64_EX.efi",
+            "V:\Windows\boot\EFI\bootmgfw.efi", "C:\Windows\Boot\EFI\bootmgfw.efi"
+          )) {
+            if (Test-Path $f) { "$f = $((Get-FileHash $f -Algorithm MD5).Hash.Substring(0,16))" }
+            else { "$f = 不存在" }
           }
           "── 引导校验通过 ──"
 
