@@ -95,7 +95,7 @@ jobs:
           "@
           $diskpart | diskpart.exe | Select-String -Pattern "successfully|error|percent|已成功|错误" | ForEach-Object { $_.Line.Trim() }
           if (-not (Test-Path "V:\") -or -not (Test-Path "Y:\")) { Write-Error "分区创建失败（V:/Y: 未就绪）" }
-          qemu-img.exe info disk.vhdx | Select-Object -First 4
+          "V: 可用 $([math]::Round((Get-Volume V).Size/1GB)) GiB / Y: 就绪"
 
       - name: 释放镜像（wimlib apply）
         shell: pwsh
