@@ -532,7 +532,7 @@ jobs:
                 "fsutil 清稀疏失败，顺序重写稠密化（约 2 分钟）..."
                 $inStream = [IO.File]::OpenRead("$PWD\forensic.vhdx")
                 $outStream = [IO.File]::Open("$PWD\forensic-dense.vhdx", 'Create', 'Write')
-                $buf = New-Object byte[] (8<<20)
+                $buf = New-Object byte[] 8388608
                 while (($n = $inStream.Read($buf, 0, $buf.Length)) -gt 0) { $outStream.Write($buf, 0, $n) }
                 $outStream.Close(); $inStream.Close()
                 Remove-Item forensic.vhdx -Force
