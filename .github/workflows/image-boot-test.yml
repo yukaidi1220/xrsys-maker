@@ -1,0 +1,207 @@
+# EEEOS 镜像自动开机测试：建盘 → 释放 → 引导 → QEMU 开机 → 每 3 秒截图 → 打包 artifact。
+# 能力依据 runner-probe.yml 实测（2026-10-25）：windows-latest HypervisorPresent=True、
+# WHPX 加速可用（失败自动回退 TCG）、choco 可装 QEMU 11.x、自带 edk2 UEFI 固件、VHDX 原生支持。
+# 注意被测镜像须具备无人值守能力（EEEOS nightly 自带 injectdeploy + unattend）。
+name: 镜像开机测试
+
+on:
+  workflow_dispatch:
+    inputs:
+      metadata_json:
+        description: "nightly 元数据 JSON 链接（优先；其 sys.url 为 ESD 直链）"
+        required: false
+        default: "https://res.yukaidi.top/d/gslb/zhipin/System/Nightly/EEEOS_Win11_26H1_Pro_x64_CN_Full_Net.json"
+      esd_url:
+        description: "ESD 直链（填了则忽略上面的 metadata_json）"
+        required: false
+        default: ""
+      image_index:
+        description: "镜像索引（1 起；4=专业版，多版本母盘见 docs/boot-test.md）"
+        required: false
+        default: "4"
+      mem_gb:
+        description: "虚拟机内存 GB"
+        required: false
+        default: "6"
+      run_minutes:
+        description: "开机测试最长时长（分钟）"
+        required: false
+        default: "40"
+  # schedule:
+  #   # 每天抽查一个目标（先手动验证跑通后再启用）
+  #   - cron: "40 17 * * *"
+
+jobs:
+  boot-test:
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - name: 解析被测 ESD
+        shell: pwsh
+        run: |
+          $esd = "${{ inputs.esd_url }}"
+          if (-not $esd) {
+            $meta = "${{ inputs.metadata_json }}"
+            Write-Host "拉取元数据: $meta"
+            $json = Invoke-RestMethod -Uri $meta -MaximumRedirection 10
+            $esd = $json.sys.url
+            Write-Host "版本: $($json.sys.vercn) $($json.sys.date)  大小: $($json.sys.size)"
+          }
+          if (-not $esd) { Write-Error "未取得 ESD 链接" }
+          Add-Content $env:GITHUB_ENV "ESD_URL=$esd"
+          Write-Host "ESD: $esd"
+
+      - name: 安装 QEMU 与 wimlib
+        shell: pwsh
+        run: |
+          choco install qemu -y --no-progress
+          $qemu = Get-ChildItem "C:\Program Files\qemu" -Filter qemu-system-x86_64.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $qemu) { $qemu = Get-ChildItem "C:\ProgramData\chocolatey\lib" -Filter qemu-system-x86_64.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName }
+          if (-not $qemu) { Write-Error "找不到 qemu-system-x86_64.exe" }
+          "QEMU: $qemu"
+          Add-Content $env:GITHUB_PATH (Split-Path $qemu)
+          & $qemu --version
+          Invoke-WebRequest -Uri "https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/wimlib-1.14.4-windows-x86_64-bin.zip" -OutFile wimlib.zip
+          Expand-Archive wimlib.zip -DestinationPath bin -Force
+          Move-Item "bin\wimlib-1.14.4-windows-x86_64-bin\*" bin -Force
+          .\bin\wimlib-imagex.exe --version
+
+      - name: 下载 ESD
+        shell: pwsh
+        run: |
+          curl.exe -L --retry 3 --connect-timeout 20 -o image.esd "$env:ESD_URL"
+          if ((Get-Item image.esd).Length -lt 100MB) { Write-Error "ESD 下载异常（$((Get-Item image.esd).Length) 字节）" }
+          "ESD 大小: $([math]::Round((Get-Item image.esd).Length / 1GB, 2)) GiB"
+
+      - name: 建测试盘（GPT + EFI + MSR + 主分区）
+        shell: pwsh
+        run: |
+          qemu-img.exe create -f vhdx disk.vhdx 60G
+          qemu-img.exe info disk.vhdx | Select-Object -First 4
+          # diskpart 对 VHDX 操作：GPT 布局，EFI(FAT32)=Y:，主分区(NTFS)=V:
+          $diskpart = @"
+          select vdisk file="$PWD\disk.vhdx"
+          attach vdisk
+          convert gpt
+          create partition efi size=100
+          format fs=fat32 label=System quick
+          assign letter=Y
+          create partition msr size=16
+          create partition primary
+          format fs=ntfs label=Windows quick
+          assign letter=V
+          "@
+          $diskpart | diskpart.exe | Select-String -Pattern "虚拟磁盘|DiskPart|分区|卷" | Select-Object -First 12
+          if (-not (Test-Path "V:\") -or -not (Test-Path "Y:\")) { Write-Error "分区创建失败（V:/Y: 未就绪）" }
+
+      - name: 释放镜像（wimlib apply）
+        shell: pwsh
+        run: |
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          $p = Start-Process .\bin\wimlib-imagex.exe -ArgumentList @("apply", "image.esd", "${{ inputs.image_index }}", "V:\") -PassThru -NoNewWindow
+          # apply 10-20 分钟级，仅每 5 分钟报个心跳
+          while (-not $p.HasExited) { Start-Sleep 300; if (-not $p.HasExited) { "apply 进行中... $($sw.Elapsed.ToString('hh\:mm\:ss'))" } }
+          if ($p.ExitCode -ne 0) { Write-Error "wimlib apply 失败（exit $($p.ExitCode)）" }
+          "apply 完成，耗时 $($sw.Elapsed.ToString('hh\:mm\:ss'))"
+
+      - name: 写引导（bcdboot）
+        shell: pwsh
+        run: |
+          & "V:\Windows\System32\bcdboot.exe" V:\Windows /s Y: /f UEFI
+          if ($LASTEXITCODE -ne 0) { Write-Error "bcdboot 失败（exit $LASTEXITCODE）" }
+          Get-ChildItem Y:\EFI -Recurse -Filter "*.efi" | Select-Object -First 5 -ExpandProperty FullName
+
+      - name: 卸载 VHDX
+        shell: pwsh
+        run: |
+          @"
+          select vdisk file="$PWD\disk.vhdx"
+          detach vdisk
+          "@ | diskpart.exe | Out-Null
+          "VHDX 已卸载，交给 QEMU"
+
+      - name: QEMU 开机 + 每 3 秒截图
+        shell: pwsh
+        run: |
+          $qemuDir = Split-Path (Get-Command qemu-system-x86_64.exe).Source
+          $edk2 = Get-ChildItem $qemuDir -Recurse -Filter "edk2-x86_64-code.fd" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $edk2) { Write-Error "未找到 edk2-x86_64-code.fd 固件" }
+          "固件: $edk2"
+          New-Item -ItemType Directory shots | Out-Null
+          $args = @(
+            '-machine','q35',
+            '-accel','whpx','-accel','tcg',
+            '-m',"${{ inputs.mem_gb }}G",'-smp','4',
+            '-drive','file=disk.vhdx,format=vhdx,if=none,id=hd0',
+            '-device','ahci,id=ahci0',
+            '-device','ide-hd,drive=hd0,bus=ahci0.0',
+            '-drive',"if=pflash,format=raw,readonly=on,file=$edk2",
+            '-netdev','user,id=n0','-device','e1000,netdev=n0',
+            '-display','none',
+            '-qmp','tcp:127.0.0.1:4444,server,nowait'
+          )
+          $p = Start-Process qemu-system-x86_64.exe -ArgumentList $args -PassThru -NoNewWindow -RedirectStandardError qemu-stderr.log
+          Start-Sleep -Seconds 8
+          if ($p.HasExited) {
+            "QEMU 秒退，stderr："
+            Get-Content qemu-stderr.log -ErrorAction SilentlyContinue | Select-Object -First 10
+            Write-Error "QEMU 未能启动"
+          }
+          "QEMU 已启动（WHPX→TCG 自动回退），PID $($p.Id)"
+
+          # QMP 客户端：连一次，循环发 screendump
+          $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 4444)
+          $stream = $client.GetStream()
+          $reader = New-Object System.IO.StreamReader($stream)
+          $writer = New-Object System.IO.StreamWriter($stream); $writer.AutoFlush = $true
+          $null = $reader.ReadLine()                                    # greeting
+          $writer.WriteLine('{"execute":"qmp_capabilities"}'); $null = $reader.ReadLine()
+
+          function Wait-QmpReturn($reader) {
+            $deadline = (Get-Date).AddSeconds(15)
+            while ((Get-Date) -lt $deadline) {
+              $line = $reader.ReadLine()
+              if ($null -eq $line) { return $false }
+              if ($line -match '"return"') { return $true }
+              if ($line -match '"error"') { Write-Host "QMP 错误: $line"; return $false }
+            }
+            return $false
+          }
+
+          $limit = (Get-Date).AddMinutes(${{ inputs.run_minutes }})
+          $i = 0; $stable = 0; $lastHash = $null; $kept = 0
+          while ((Get-Date) -lt $limit -and -not $p.HasExited) {
+            $i++
+            $shot = "shot-{0:d4}.ppm" -f $i
+            $writer.WriteLine('{"execute":"screendump","arguments":{"filename":"' + $shot + '"}}')
+            if (Wait-QmpReturn $reader) {
+              $h = (Get-FileHash $shot -ErrorAction SilentlyContinue).Hash
+              # 去重保留：画面变了才进 artifact；每 100 张强留一张做时间轴
+              if ($h -ne $lastHash -or ($i % 100 -eq 0)) {
+                Move-Item $shot "shots\$shot" -Force; $kept++
+                if ($h -ne $lastHash) { $stable = 0 } else { $stable++ }
+                $lastHash = $h
+              } else {
+                $stable++
+                Remove-Item $shot -Force -ErrorAction SilentlyContinue
+              }
+            }
+            if ($stable -ge 10) { "画面已稳定 $stable 张（约 $(3*$stable) 秒无变化），判定到达桌面/静止，提前结束"; break }
+            Start-Sleep -Seconds 3
+          }
+          "共截图 $i 张，保留 $kept 张"
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          $client.Close()
+          "── qemu stderr 末尾 ──"
+          Get-Content qemu-stderr.log -Tail 8 -ErrorAction SilentlyContinue
+          if ($kept -eq 0) { Write-Error "一张截图都没保住，开机失败" }
+
+      - name: 打包上传
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-shots-${{ inputs.image_index }}
+          path: |
+            shots/
+            qemu-stderr.log
+          retention-days: 7
