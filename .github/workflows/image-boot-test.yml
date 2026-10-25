@@ -31,13 +31,21 @@ on:
         description: "CPU 型号（空=默认。whpx 崩 VP exit 4 时可试 Skylake-Client / max）"
         required: false
         default: ""
+      smp:
+        description: "vCPU 数（WHPX 多核竞态可试 2/1）"
+        required: false
+        default: "4"
+      runner:
+        description: "runner 镜像标签（windows-latest / windows-2025）"
+        required: false
+        default: "windows-latest"
   # schedule:
   #   # 每天抽查一个目标（先手动验证跑通后再启用）
   #   - cron: "40 17 * * *"
 
 jobs:
   boot-test:
-    runs-on: windows-latest
+    runs-on: ${{ inputs.runner || 'windows-latest' }}
     timeout-minutes: 300
     steps:
 
@@ -163,7 +171,7 @@ jobs:
           "固件: $edk2"
           New-Item -ItemType Directory shots | Out-Null
           # 整串传参并内嵌引号：路径含空格（C:\Program Files）时数组参数会被拆散
-          $argString = "-machine q35 -accel ${{ inputs.accel }} -m ${{ inputs.mem_gb }}G -smp 4 " +
+          $argString = "-machine q35 -accel ${{ inputs.accel }} -m ${{ inputs.mem_gb }}G -smp ${{ inputs.smp || '4' }} " +
             "-drive `"file=disk.vhdx,format=vhdx,if=none,id=hd0`" " +
             "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 " +
             "-drive `"if=pflash,format=raw,readonly=on,file=$edk2`" " +
