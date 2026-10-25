@@ -523,8 +523,24 @@ jobs:
             $qemuImg2 = Join-Path (Split-Path (Get-Command qemu-system-x86_64.exe).Source) "qemu-img.exe"
             $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
             & $qemuImg2 convert -f qcow2 -O vhdx -o subformat=fixed disk.qcow2 forensic.vhdx 2>&1 | Out-Null
-            if (Test-Path forensic.vhdx) { $vfile = "forensic.vhdx"; "qcow2 已转出取证副本（fixed）耗时 $([int]$sw2.Elapsed.TotalSeconds)s" }
-            else { "取证副本转换失败" }
+            if (Test-Path forensic.vhdx) {
+              # qemu-img 在 Windows 上一律给产物打 NTFS 稀疏属性，runner 的虚拟磁盘栈
+              # 拒挂（实测报错原文 "...must not be sparse"，本地机器宽容所以只能 CI 验）。
+              # fsutil 秒清；清不掉就顺序重写稠密化兜底
+              fsutil sparse setflag forensic.vhdx 0 | Out-Null
+              if ((Get-Item forensic.vhdx).Attributes -band [IO.FileAttributes]::SparseFile) {
+                "fsutil 清稀疏失败，顺序重写稠密化（约 2 分钟）..."
+                $inStream = [IO.File]::OpenRead("$PWD\forensic.vhdx")
+                $outStream = [IO.File]::Open("$PWD\forensic-dense.vhdx", 'Create', 'Write')
+                $buf = New-Object byte[] (8<<20)
+                while (($n = $inStream.Read($buf, 0, $buf.Length)) -gt 0) { $outStream.Write($buf, 0, $n) }
+                $outStream.Close(); $inStream.Close()
+                Remove-Item forensic.vhdx -Force
+                Rename-Item forensic-dense.vhdx forensic.vhdx
+              }
+              "取证副本稀疏属性: $((Get-Item forensic.vhdx).Attributes)"
+              $vfile = "forensic.vhdx"
+            } else { "取证副本转换失败" }
           }
           $attach = @"
           select vdisk file="$PWD\$vfile"
