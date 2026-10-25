@@ -100,9 +100,25 @@ jobs:
       - name: 释放镜像（wimlib apply）
         shell: pwsh
         run: |
+          # 先解析映像数：nightly ESD 是 capture 出来的单映像（只有索引1），
+          # 多版本索引只存在于 MSUpdate 原版 ISO 的 install.esd
+          $infoLines = & .\bin\wimlib-imagex.exe info image.esd 2>$null
+          $imageCount = 0
+          foreach ($l in $infoLines) { if ($l -match '^Image Count:\s*(\d+)') { $imageCount = [int]$Matches[1] } }
+          "映像数: $imageCount"
+          foreach ($l in $infoLines) { if ($l -match '^Name:') { "  $($l.Trim())" } }
+          $idx = [int]"${{ inputs.image_index }}"
+          if ($idx -gt $imageCount) {
+            if ($imageCount -eq 1) {
+              "::warning::指定的索引 $idx 超出范围（该 ESD 仅 1 个映像），自动回退索引 1"
+              $idx = 1
+            } else {
+              Write-Error "索引 $idx 超出映像数 $imageCount"
+            }
+          }
+          "使用映像索引: $idx"
           $sw = [System.Diagnostics.Stopwatch]::StartNew()
-          $p = Start-Process .\bin\wimlib-imagex.exe -ArgumentList @("apply", "image.esd", "${{ inputs.image_index }}", "V:\") -PassThru -NoNewWindow
-          # apply 10-20 分钟级，仅每 5 分钟报个心跳
+          $p = Start-Process .\bin\wimlib-imagex.exe -ArgumentList @("apply", "image.esd", "$idx", "V:\") -PassThru -NoNewWindow
           while (-not $p.HasExited) { Start-Sleep 300; if (-not $p.HasExited) { "apply 进行中... $($sw.Elapsed.ToString('hh\:mm\:ss'))" } }
           if ($p.ExitCode -ne 0) { Write-Error "wimlib apply 失败（exit $($p.ExitCode)）" }
           "apply 完成，耗时 $($sw.Elapsed.ToString('hh\:mm\:ss'))"
