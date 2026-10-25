@@ -449,9 +449,11 @@ jobs:
           Remove-Item $listFile -ErrorAction SilentlyContinue
           $used = 0; $skipped = 0
           foreach ($f in (Get-ChildItem shots\shot-*.ppm | Sort-Object Name)) {
-            $sz = Get-PpmSize $f.FullName
-            if ($sz -and $sz.w -eq 1280 -and $sz.h -eq 800) { Add-Content $listFile "file '$($f.Name)'"; $used++ }
-            else { $skipped++ }
+            try {
+              $sz = Get-PpmSize $f.FullName
+              if ($sz -and $sz.w -eq 1280 -and $sz.h -eq 800) { Add-Content $listFile "file '$($f.Name)'"; $used++ }
+              else { $skipped++ }
+            } catch { $skipped++ }
           }
           "入选 $used 帧，丢弃非 1280x800 帧 $skipped 张"
           if ($used -eq 0) { "::warning::没有 1280x800 帧，跳过视频生成"; exit 0 }
@@ -552,15 +554,24 @@ jobs:
             try { $detach | diskpart.exe | Out-Null } catch {}
           }
 
-      - name: 打包上传
+      - name: 打包上传（视频，单独 artifact，名带 run id）
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          # 后续计划在名字里再加镜像文件名（esd 名）
+          name: boot-video-${{ github.run_id }}
+          path: boot-video.mp4
+          retention-days: 7
+
+      - name: 打包上传（截图/日志/取证，名带 run id）
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: boot-shots-${{ inputs.image_index }}-a${{ matrix.attempt }}
+          name: boot-shots-${{ inputs.image_index }}-a${{ matrix.attempt }}-${{ github.run_id }}
           path: |
             shots/
             qemu-stderr-*.log
             verdict.txt
             forensics/
-            boot-video.mp4
           retention-days: 7
+          if-no-files-found: warn
