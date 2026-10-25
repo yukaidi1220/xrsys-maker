@@ -40,9 +40,9 @@ on:
         required: false
         default: "windows-latest"
       boot_rounds:
-        description: "最多开机次数（部署流程实测会连续重启 3+ 次，默认 5）"
+        description: "最多开机次数（部署流程会连续重启多次直至正常关机，默认 8）"
         required: false
-        default: "5"
+        default: "8"
       attempts:
         description: "并行尝试次数（GH runner 池存在对 WHPX 客户机不友好的宿主机，2=失败自动换机重试）"
         required: false
@@ -52,9 +52,9 @@ on:
         required: false
         default: "q35"
       disk:
-        description: "QEMU 磁盘格式（vhdx=现状；qcow2=建盘后转换，QEMU 原生格式最稳定）"
+        description: "QEMU 磁盘格式（qcow2=默认，QEMU 原生格式，VHDX 有动态扩容损坏 bug QEMU#727 已拉黑）"
         required: false
-        default: "vhdx"
+        default: "qcow2"
       nic:
         description: "网卡型号（e1000=现状；none=去掉网卡排除变量，部署离线不需要）"
         required: false
