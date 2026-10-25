@@ -214,7 +214,7 @@ jobs:
 
           $limit = (Get-Date).AddMinutes(${{ inputs.run_minutes }})
           $i = 0; $kept = 0; $verdict = "timeout"
-          $lastMain = $null; $lastBand = $null; $mainSame = 0; $bandTickAge = 999
+          $lastMain = $null; $lastBand = $null; $mainSame = 0; $bandTickInStable = $false
           while ((Get-Date) -lt $limit -and -not $p.HasExited) {
             $i++
             $shot = "shot-{0:d4}.ppm" -f $i
@@ -229,13 +229,17 @@ jobs:
                 } else {
                   Remove-Item $shot -Force -ErrorAction SilentlyContinue
                 }
-                if ($main -eq $lastMain) { $mainSame++ } else { $mainSame = 0 }
-                if ($band -ne $lastBand) { $bandTickAge = 0 } else { $bandTickAge++ }
-                $lastMain = $main; $lastBand = $band
-                if ($mainSame -ge 10) {
-                  if ($bandTickAge -le 25) { $verdict = "desktop"; break }
-                  else { $verdict = "frozen"; break }
+                # 时钟跳变必须发生在"主画面已稳定期间"（null→首值的跳变不算，
+                # 否则 UEFI logo 静止 30 秒就会被误判成桌面——第 9 次运行实测踩过）
+                if ($main -eq $lastMain) {
+                  $mainSame++
+                  if ($band -ne $lastBand) { $bandTickInStable = $true }
+                } else {
+                  $mainSame = 0; $bandTickInStable = $false
                 }
+                $lastMain = $main; $lastBand = $band
+                if ($mainSame -ge 10 -and $bandTickInStable) { $verdict = "desktop"; break }
+                if ($mainSame -ge 50 -and -not $bandTickInStable) { $verdict = "frozen"; break }
               } else {
                 Remove-Item $shot -Force -ErrorAction SilentlyContinue
               }
