@@ -78,10 +78,10 @@ jobs:
       - name: 建测试盘（GPT + EFI + MSR + 主分区）
         shell: pwsh
         run: |
-          qemu-img.exe create -f vhdx disk.vhdx 60G
-          qemu-img.exe info disk.vhdx | Select-Object -First 4
-          # diskpart 对 VHDX 操作：GPT 布局，EFI(FAT32)=Y:，主分区(NTFS)=V:
+          # 用 diskpart 原生建 VHDX：qemu-img 建的盘会被 attach 以
+          # "must be uncompressed...not be sparse" 拒收（runner D: 盘卷属性）
           $diskpart = @"
+          create vdisk file="$PWD\disk.vhdx" maximum=61440 type=expandable
           select vdisk file="$PWD\disk.vhdx"
           attach vdisk
           convert gpt
@@ -93,8 +93,9 @@ jobs:
           format fs=ntfs label=Windows quick
           assign letter=V
           "@
-          $diskpart | diskpart.exe | Select-String -Pattern "虚拟磁盘|DiskPart|分区|卷" | Select-Object -First 12
+          $diskpart | diskpart.exe | Select-String -Pattern "successfully|error|百分比|percent" | Select-Object -First 12
           if (-not (Test-Path "V:\") -or -not (Test-Path "Y:\")) { Write-Error "分区创建失败（V:/Y: 未就绪）" }
+          qemu-img.exe info disk.vhdx | Select-Object -First 4
 
       - name: 释放镜像（wimlib apply）
         shell: pwsh
