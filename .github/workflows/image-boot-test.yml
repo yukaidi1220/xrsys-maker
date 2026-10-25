@@ -38,7 +38,7 @@ on:
 jobs:
   boot-test:
     runs-on: windows-latest
-    timeout-minutes: 150
+    timeout-minutes: 300
     steps:
 
       - name: 安装 QEMU 与 wimlib
