@@ -60,14 +60,16 @@ jobs:
             Expand-Archive aria2.zip -DestinationPath temp-aria2 -Force
             Move-Item "temp-aria2\aria2-1.37.0-win-64bit-build1\aria2c.exe" .\bin\ -Force
           }
-          $finalUrl = $env:ESD_URL
+          $esdUrl = "${{ inputs.esd_url }}"
+          $finalUrl = $esdUrl
           try {
-            $req = [System.Net.WebRequest]::Create($env:ESD_URL)
+            $req = [System.Net.WebRequest]::Create($esdUrl)
             $req.AllowAutoRedirect = $false
             $res = $req.GetResponse()
             $loc = $res.GetResponseHeader('Location'); $res.Close()
             if ($loc) { $finalUrl = $loc }
           } catch { }
+          if (-not $finalUrl) { Write-Error "未取得 ESD 链接" }
           $sw = [System.Diagnostics.Stopwatch]::StartNew()
           & .\bin\aria2c.exe --no-conf=true --continue --allow-overwrite=true --summary-interval=0 `
             --remote-time=true --retry-wait=5 --check-certificate=false -x16 -s16 "$finalUrl" -o image.esd
