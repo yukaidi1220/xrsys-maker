@@ -7,16 +7,12 @@ name: 镜像开机测试
 on:
   workflow_dispatch:
     inputs:
-      metadata_json:
-        description: "nightly 元数据 JSON 链接（优先；其 sys.url 为 ESD 直链）"
-        required: false
-        default: "https://res.yukaidi.top/d/gslb/zhipin/System/Nightly/EEEOS_Win11_26H1_Pro_x64_CN_Full_Net.json"
       esd_url:
-        description: "ESD 直链（填了则忽略上面的 metadata_json）"
-        required: false
-        default: ""
+        description: "ESD 直链（res.yukaidi.top 的 302 链接即可，aria2c 会解析后下载）"
+        required: true
+        default: "https://res.yukaidi.top/d/cr/qzy-hk/System/Nightly/2026.07.22/EEEOS_Win11_26H1_Pro_x64_CN_Full_Net_2026.07.22_28000.2525.esd"
       image_index:
-        description: "镜像索引（1 起；4=专业版，多版本母盘见 docs/boot-test.md）"
+        description: "镜像索引（1 起；nightly ESD 单映像自动回退 1，原版 ISO 的多版本母盘 4=专业版）"
         required: false
         default: "4"
       mem_gb:
@@ -36,20 +32,6 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 150
     steps:
-      - name: 解析被测 ESD
-        shell: pwsh
-        run: |
-          $esd = "${{ inputs.esd_url }}"
-          if (-not $esd) {
-            $meta = "${{ inputs.metadata_json }}"
-            Write-Host "拉取元数据: $meta"
-            $json = Invoke-RestMethod -Uri $meta -MaximumRedirection 10
-            $esd = $json.sys.url
-            Write-Host "版本: $($json.sys.vercn) $($json.sys.date)  大小: $($json.sys.size)"
-          }
-          if (-not $esd) { Write-Error "未取得 ESD 链接" }
-          Add-Content $env:GITHUB_ENV "ESD_URL=$esd"
-          Write-Host "ESD: $esd"
 
       - name: 安装 QEMU 与 wimlib
         shell: pwsh
@@ -170,19 +152,14 @@ jobs:
           if (-not $edk2) { Write-Error "未找到 edk2-x86_64-code.fd 固件" }
           "固件: $edk2"
           New-Item -ItemType Directory shots | Out-Null
-          $args = @(
-            '-machine','q35',
-            '-accel','whpx','-accel','tcg',
-            '-m',"${{ inputs.mem_gb }}G",'-smp','4',
-            '-drive','file=disk.vhdx,format=vhdx,if=none,id=hd0',
-            '-device','ahci,id=ahci0',
-            '-device','ide-hd,drive=hd0,bus=ahci0.0',
-            '-drive',"if=pflash,format=raw,readonly=on,file=$edk2",
-            '-netdev','user,id=n0','-device','e1000,netdev=n0',
-            '-display','none',
-            '-qmp','tcp:127.0.0.1:4444,server,nowait'
-          )
-          $p = Start-Process qemu-system-x86_64.exe -ArgumentList $args -PassThru -NoNewWindow -RedirectStandardError qemu-stderr.log
+          # 整串传参并内嵌引号：路径含空格（C:\Program Files）时数组参数会被拆散
+          $argString = "-machine q35 -accel whpx -accel tcg -m ${{ inputs.mem_gb }}G -smp 4 " +
+            "-drive `"file=disk.vhdx,format=vhdx,if=none,id=hd0`" " +
+            "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 " +
+            "-drive `"if=pflash,format=raw,readonly=on,file=$edk2`" " +
+            "-netdev user,id=n0 -device e1000,netdev=n0 " +
+            "-display none -qmp tcp:127.0.0.1:4444,server,nowait"
+          $p = Start-Process qemu-system-x86_64.exe -ArgumentList $argString -PassThru -NoNewWindow -RedirectStandardError qemu-stderr.log
           Start-Sleep -Seconds 8
           if ($p.HasExited) {
             "QEMU 秒退，stderr："
