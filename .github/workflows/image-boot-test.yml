@@ -171,33 +171,67 @@ jobs:
             return $false
           }
 
+          # 双区域判定：主画面（上部 h-2 行）静止 + 时钟带（底部 2 行）在 ~75 秒窗口内
+          # 跳变过 → 判"桌面空闲"结束；主画面静止但时钟带也死寂 → 判"卡死"失败。
+          # PPM(P6) 头部逐 token 解析后对两个区域分别取 MD5。
+          function Get-PpmHashes([string]$path) {
+            $bytes = [IO.File]::ReadAllBytes($path)
+            if ($bytes.Length -lt 16 -or $bytes[0] -ne 0x50 -or $bytes[1] -ne 0x36) { return $null }
+            $nums = @(); $tok = ''; $state = 0; $i = 2
+            for (; $i -lt 128 -and $state -lt 3; $i++) {
+              $c = $bytes[$i]
+              if ($c -eq 32 -or $c -eq 10 -or $c -eq 13 -or $c -eq 9) {
+                if ($tok) { $nums += [int]$tok; $tok = ''; $state++ }
+              } else { $tok += [char]$c }
+            }
+            if ($nums.Count -lt 2) { return $null }
+            $rowBytes = $nums[0] * 3
+            $mainEnd = $i + ($nums[1] - 2) * $rowBytes
+            if ($mainEnd -ge $bytes.Length) { return $null }
+            $md5 = [Security.Cryptography.MD5]::Create()
+            $main = [BitConverter]::ToString($md5.ComputeHash($bytes, $i, $mainEnd - $i))
+            $band = [BitConverter]::ToString($md5.ComputeHash($bytes, $mainEnd, $bytes.Length - $mainEnd))
+            return "$main|$band"
+          }
+
           $limit = (Get-Date).AddMinutes(${{ inputs.run_minutes }})
-          $i = 0; $stable = 0; $lastHash = $null; $kept = 0
+          $i = 0; $kept = 0; $verdict = "timeout"
+          $lastMain = $null; $lastBand = $null; $mainSame = 0; $bandTickAge = 999
           while ((Get-Date) -lt $limit -and -not $p.HasExited) {
             $i++
             $shot = "shot-{0:d4}.ppm" -f $i
             $writer.WriteLine('{"execute":"screendump","arguments":{"filename":"' + $shot + '"}}')
             if (Wait-QmpReturn $reader) {
-              $h = (Get-FileHash $shot -ErrorAction SilentlyContinue).Hash
-              # 去重保留：画面变了才进 artifact；每 100 张强留一张做时间轴
-              if ($h -ne $lastHash -or ($i % 100 -eq 0)) {
-                Move-Item $shot "shots\$shot" -Force; $kept++
-                if ($h -ne $lastHash) { $stable = 0 } else { $stable++ }
-                $lastHash = $h
+              $hashes = Get-PpmHashes $shot
+              if ($hashes) {
+                $main, $band = $hashes.Split('|')
+                # 去重保留：主画面变了才进 artifact；每 100 张强留一张做时间轴
+                if (($main -ne $lastMain) -or ($i % 100 -eq 0)) {
+                  Move-Item $shot "shots\$shot" -Force; $kept++
+                } else {
+                  Remove-Item $shot -Force -ErrorAction SilentlyContinue
+                }
+                if ($main -eq $lastMain) { $mainSame++ } else { $mainSame = 0 }
+                if ($band -ne $lastBand) { $bandTickAge = 0 } else { $bandTickAge++ }
+                $lastMain = $main; $lastBand = $band
+                if ($mainSame -ge 10) {
+                  if ($bandTickAge -le 25) { $verdict = "desktop"; break }
+                  else { $verdict = "frozen"; break }
+                }
               } else {
-                $stable++
                 Remove-Item $shot -Force -ErrorAction SilentlyContinue
               }
             }
-            if ($stable -ge 10) { "画面已稳定 $stable 张（约 $(3*$stable) 秒无变化），判定到达桌面/静止，提前结束"; break }
             Start-Sleep -Seconds 3
           }
-          "共截图 $i 张，保留 $kept 张"
+          "截图 $i 张，保留 $kept 张，判定: $verdict"
+          "verdict=$verdict" | Out-File verdict.txt -Encoding utf8
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           $client.Close()
           "── qemu stderr 末尾 ──"
           Get-Content qemu-stderr.log -Tail 8 -ErrorAction SilentlyContinue
-          if ($kept -eq 0) { Write-Error "一张截图都没保住，开机失败" }
+          if ($verdict -eq "frozen") { Write-Error "判定为卡死（主画面与时钟带均静止），开机失败" }
+          if ($verdict -eq "timeout" -and $kept -eq 0) { Write-Error "超时且无任何截图，开机失败" }
 
       - name: 打包上传
         if: always()
