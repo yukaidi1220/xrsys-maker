@@ -199,7 +199,7 @@ jobs:
           New-Item -ItemType Directory shots | Out-Null
           # 整串传参并内嵌引号：路径含空格（C:\Program Files）时数组参数会被拆散
           $argString = "-machine q35 -accel ${{ inputs.accel }} -m ${{ inputs.mem_gb }}G -smp ${{ inputs.smp || '4' }} " +
-            "-drive `"file=disk.vhdx,format=vhdx,if=none,id=hd0`" " +
+            "-drive `"file=disk.vhdx,format=vhdx,if=none,id=hd0,cache=writethrough`" " +
             "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 " +
             "-drive `"if=pflash,format=raw,readonly=on,file=$edk2`" " +
             "-netdev user,id=n0 -device e1000,netdev=n0 " +
@@ -334,7 +334,17 @@ jobs:
           "@
           $attach | diskpart.exe | Out-Null
           Start-Sleep -Seconds 6
+          # 重挂后原盘符不保证回归：按 VHDX 磁盘定位分区并强制赋回 Y:/V:
+          $vdiskDisk = Get-Disk | Where-Object { $_.BusType -eq 'File Backed Virtual' } | Select-Object -First 1
+          if (-not $vdiskDisk) { Write-Error "取证失败：重挂后找不到 VHDX 磁盘" }
+          $espPart = Get-Partition -DiskNumber $vdiskDisk.Number | Where-Object { $_.Type -eq 'System' } | Select-Object -First 1
+          $osPart  = Get-Partition -DiskNumber $vdiskDisk.Number | Where-Object { $_.Type -eq 'Basic' } | Select-Object -First 1
+          if ($espPart.DriveLetter -ne 'Y') { Set-Partition -DiskNumber $espPart.DiskNumber -PartitionNumber $espPart.PartitionNumber -NewDriveLetter Y }
+          if ($osPart.DriveLetter -ne 'V') { Set-Partition -DiskNumber $osPart.DiskNumber -PartitionNumber $osPart.PartitionNumber -NewDriveLetter V }
           New-Item -ItemType Directory forensics -ErrorAction Ignore | Out-Null
+          # BCD 全量枚举（再遇引导错误可直接看到坏在哪）
+          & bcdedit /store Y:\EFI\Microsoft\Boot\BCD /enum all 2>&1 | Out-File forensics\bcd-enum.txt -Encoding utf8
+          "BCD 枚举已存 forensics\bcd-enum.txt"
           $srcs = @(
             "V:\Windows\Minidump",
             "V:\Windows\MEMORY.DMP",
