@@ -79,7 +79,8 @@ jobs:
         shell: pwsh
         run: |
           # 用 diskpart 原生建 VHDX：qemu-img 建的盘会被 attach 以
-          # "must be uncompressed...not be sparse" 拒收（runner D: 盘卷属性）
+          # "must be uncompressed...not be sparse" 拒收（runner D: 盘卷属性）。
+          # 注意：convert gpt 会自动创建 MSR 分区，不要再手动 create partition msr。
           $diskpart = @"
           create vdisk file="$PWD\disk.vhdx" maximum=61440 type=expandable
           select vdisk file="$PWD\disk.vhdx"
@@ -88,12 +89,11 @@ jobs:
           create partition efi size=100
           format fs=fat32 label=System quick
           assign letter=Y
-          create partition msr size=16
           create partition primary
           format fs=ntfs label=Windows quick
           assign letter=V
           "@
-          $diskpart | diskpart.exe | Select-String -Pattern "successfully|error|百分比|percent" | Select-Object -First 12
+          $diskpart | diskpart.exe | Select-String -Pattern "successfully|error|percent|已成功|错误" | ForEach-Object { $_.Line.Trim() }
           if (-not (Test-Path "V:\") -or -not (Test-Path "Y:\")) { Write-Error "分区创建失败（V:/Y: 未就绪）" }
           qemu-img.exe info disk.vhdx | Select-Object -First 4
 
