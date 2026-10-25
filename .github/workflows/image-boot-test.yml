@@ -434,12 +434,15 @@ jobs:
           # 重挂测试盘拷出系统内证据：蓝屏 minidump、部署日志、事件日志。
           # 注意：here-string 收尾 "@ 必须顶格（缩进会导致 ParserError，实测踩过）
           # 取证 = best-effort：整体 try/catch 永不掀翻步骤（盘符乱值曾炸 Join-Path、Set-Partition 也炸过）
-          # qcow2 模式取证：转回 VHDX 副本再挂载（diskpart 只认 VHDX）
+          # qcow2 模式取证：转回 VHDX 副本再挂载（diskpart 只认 VHDX）。
+          # 必须 fixed 预分配子格式——qemu-img 默认产物是稀疏文件，diskpart 拒挂（QEMU#136，实测 M1/M3 三连败）
           $vfile = "disk.vhdx"
           if ("${{ inputs.disk }}" -eq "qcow2" -and (Test-Path disk.qcow2)) {
             $qemuImg2 = Join-Path (Split-Path (Get-Command qemu-system-x86_64.exe).Source) "qemu-img.exe"
-            & $qemuImg2 convert -f qcow2 -O vhdx disk.qcow2 forensic.vhdx 2>&1 | Out-Null
-            if (Test-Path forensic.vhdx) { $vfile = "forensic.vhdx"; "qcow2 已转出取证副本 forensic.vhdx" }
+            $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
+            & $qemuImg2 convert -f qcow2 -O vhdx -o subformat=fixed disk.qcow2 forensic.vhdx 2>&1 | Out-Null
+            if (Test-Path forensic.vhdx) { $vfile = "forensic.vhdx"; "qcow2 已转出取证副本（fixed）耗时 $([int]$sw2.Elapsed.TotalSeconds)s" }
+            else { "取证副本转换失败" }
           }
           $attach = @"
           select vdisk file="$PWD\$vfile"
