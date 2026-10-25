@@ -32,7 +32,6 @@ jobs:
           "qemu 路径: $qemu"
           Add-Content $env:GITHUB_PATH (Split-Path $qemu)
           & $qemu --version
-          qemu-img.exe --version
 
       - name: VHDX 与 UEFI 固件支持
         shell: pwsh
