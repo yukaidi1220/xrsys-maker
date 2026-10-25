@@ -314,6 +314,44 @@ jobs:
           if ($verdict -eq "frozen") { Write-Error "判定为卡死（主画面与时钟带均静止），开机失败" }
           if ($verdict -eq "timeout" -and $kept -eq 0) { Write-Error "超时且无任何截图，开机失败" }
 
+      - name: 赛后取证（minidump / Panther / 事件日志）
+        if: always()
+        shell: pwsh
+        run: |
+          # 重挂测试盘拷出系统内证据：蓝屏 minidump（定位 0xBE 肇事驱动）、
+          # 部署日志、事件日志。截图每 3 秒一张，<3s 的蓝屏会漏拍，dump 不会。
+          try {
+            @"
+            select vdisk file="$PWD\disk.vhdx"
+            attach vdisk
+            "@ | diskpart.exe | Out-Null
+            Start-Sleep -Seconds 6
+            New-Item -ItemType Directory forensics -ErrorAction Ignore | Out-Null
+            $srcs = @(
+              "V:\Windows\Minidump",
+              "V:\Windows\MEMORY.DMP",
+              "V:\Windows\Panther",
+              "V:\Windows\System32\winevt\Logs\System.evtx",
+              "V:\Windows\System32\winevt\Logs\Application.evtx",
+              "V:\Windows\bootstat.dat"
+            )
+            foreach ($s in $srcs) {
+              if (Test-Path $s) {
+                if ((Get-Item $s).PSIsContainer -or (Get-Item $s).Length -lt 800MB) {
+                  Copy-Item $s forensics\ -Recurse -Force -ErrorAction SilentlyContinue
+                  "取证: $s"
+                } else { "跳过过大文件: $s ($([math]::Round((Get-Item $s).Length/1MB))MB)" }
+              }
+            }
+            "── 取证清单 ──"
+            Get-ChildItem forensics -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { "$($_.FullName.Substring($PWD.Path.Length+1))  $([math]::Round($_.Length/1KB))KB" }
+          } finally {
+            @"
+            select vdisk file="$PWD\disk.vhdx"
+            detach vdisk
+            "@ | diskpart.exe | Out-Null
+          }
+
       - name: 打包上传
         if: always()
         uses: actions/upload-artifact@v4
@@ -323,4 +361,5 @@ jobs:
             shots/
             qemu-stderr-*.log
             verdict.txt
+            forensics/
           retention-days: 7
