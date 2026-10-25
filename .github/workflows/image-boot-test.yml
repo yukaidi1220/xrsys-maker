@@ -367,24 +367,53 @@ jobs:
           "@
           $attach | diskpart.exe | Out-Null
           Start-Sleep -Seconds 6
-          # 重挂后原盘符不保证回归：按 VHDX 磁盘定位分区并强制赋回 Y:/V:
+          # 重挂后盘符状态不定（自动分了别的号/ESP 无号/Set-Partition 可能报错）：
+          # 有号就用 → 无号赋号 → 赋号失败挂目录兜底，任何失败都不中断取证
           $vdiskDisk = Get-Disk | Where-Object { $_.BusType -eq 'File Backed Virtual' } | Select-Object -First 1
           if (-not $vdiskDisk) { Write-Error "取证失败：重挂后找不到 VHDX 磁盘" }
           $espPart = Get-Partition -DiskNumber $vdiskDisk.Number | Where-Object { $_.Type -eq 'System' } | Select-Object -First 1
           $osPart  = Get-Partition -DiskNumber $vdiskDisk.Number | Where-Object { $_.Type -eq 'Basic' } | Select-Object -First 1
-          if ($espPart.DriveLetter -ne 'Y') { Set-Partition -DiskNumber $espPart.DiskNumber -PartitionNumber $espPart.PartitionNumber -NewDriveLetter Y }
-          if ($osPart.DriveLetter -ne 'V') { Set-Partition -DiskNumber $osPart.DiskNumber -PartitionNumber $osPart.PartitionNumber -NewDriveLetter V }
+          $Y = $null; $V = $null
+          try {
+            if ("$($espPart.DriveLetter)".Trim()) { $Y = "$($espPart.DriveLetter):" }
+            else { Set-Partition -DiskNumber $espPart.DiskNumber -PartitionNumber $espPart.PartitionNumber -NewDriveLetter Y -ErrorAction Stop; $Y = "Y:" }
+          } catch { "ESP 赋盘符失败（走兜底）: $($_.Exception.Message)" }
+          try {
+            if ("$($osPart.DriveLetter)".Trim()) { $V = "$($osPart.DriveLetter):" }
+            else { Set-Partition -DiskNumber $osPart.DiskNumber -PartitionNumber $osPart.PartitionNumber -NewDriveLetter V -ErrorAction Stop; $V = "V:" }
+          } catch { "OS 赋盘符失败（走兜底）: $($_.Exception.Message)" }
+          if (-not $Y) {
+            try {
+              New-Item -ItemType Directory esp-mnt -Force | Out-Null
+              Add-PartitionAccessPath -DiskNumber $espPart.DiskNumber -PartitionNumber $espPart.PartitionNumber -AccessPath "$PWD\esp-mnt" -ErrorAction Stop
+              $Y = "$PWD\esp-mnt"
+            } catch { "ESP 目录挂载也失败: $($_.Exception.Message)" }
+          }
+          if (-not $V) {
+            try {
+              New-Item -ItemType Directory os-mnt -Force | Out-Null
+              Add-PartitionAccessPath -DiskNumber $osPart.DiskNumber -PartitionNumber $osPart.PartitionNumber -AccessPath "$PWD\os-mnt" -ErrorAction Stop
+              $V = "$PWD\os-mnt"
+            } catch { "OS 目录挂载也失败: $($_.Exception.Message)" }
+          }
+          "ESP 路径: $Y ; OS 路径: $V"
+          if (-not $V) { Write-Error "取证失败：Windows 卷无法访问" }
           New-Item -ItemType Directory forensics -ErrorAction Ignore | Out-Null
-          # BCD 全量枚举（再遇引导错误可直接看到坏在哪）
-          & bcdedit /store Y:\EFI\Microsoft\Boot\BCD /enum all 2>&1 | Out-File forensics\bcd-enum.txt -Encoding utf8
-          "BCD 枚举已存 forensics\bcd-enum.txt"
+          if ($Y) {
+            # BCD 全量枚举（再遇引导错误可直接看到坏在哪）
+            $bcdPath = Join-Path $Y "EFI\Microsoft\Boot\BCD"
+            if (Test-Path $bcdPath) {
+              & bcdedit /store $bcdPath /enum all 2>&1 | Out-File forensics\bcd-enum.txt -Encoding utf8
+              "BCD 枚举已存 forensics\bcd-enum.txt"
+            } else { "BCD 文件不存在: $bcdPath" | Out-File forensics\bcd-enum.txt -Encoding utf8 }
+          }
           $srcs = @(
-            "V:\Windows\Minidump",
-            "V:\Windows\MEMORY.DMP",
-            "V:\Windows\Panther",
-            "V:\Windows\System32\winevt\Logs\System.evtx",
-            "V:\Windows\System32\winevt\Logs\Application.evtx",
-            "V:\Windows\bootstat.dat"
+            "$V\Windows\Minidump",
+            "$V\Windows\MEMORY.DMP",
+            "$V\Windows\Panther",
+            "$V\Windows\System32\winevt\Logs\System.evtx",
+            "$V\Windows\System32\winevt\Logs\Application.evtx",
+            "$V\Windows\bootstat.dat"
           )
           foreach ($s in $srcs) {
             if (Test-Path $s) {
