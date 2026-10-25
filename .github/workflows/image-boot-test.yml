@@ -220,7 +220,15 @@ jobs:
             $p = Start-Process qemu-system-x86_64.exe -ArgumentList $argString -PassThru -NoNewWindow -RedirectStandardError $stderrFile
             Start-Sleep -Seconds 8
             if ($p.HasExited) {
-              "第 $bootRound 次启动秒退，stderr："
+              # WHPX 初始化偶发秒退（stderr 仅特性警告无致命行，实测 40194518266）：重试一次
+              "::warning::第 $bootRound 次启动 8 秒内退出（exit $($p.ExitCode)），15 秒后重试"
+              Get-Content $stderrFile -ErrorAction SilentlyContinue | Select-Object -Last 6
+              Start-Sleep -Seconds 15
+              $p = Start-Process qemu-system-x86_64.exe -ArgumentList $argString -PassThru -NoNewWindow -RedirectStandardError $stderrFile
+              Start-Sleep -Seconds 8
+            }
+            if ($p.HasExited) {
+              "第 $bootRound 次启动重试后仍秒退，stderr："
               Get-Content $stderrFile -ErrorAction SilentlyContinue | Select-Object -First 10
               Write-Error "QEMU 未能启动"
             }
@@ -318,39 +326,39 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          # 重挂测试盘拷出系统内证据：蓝屏 minidump（定位 0xBE 肇事驱动）、
-          # 部署日志、事件日志。截图每 3 秒一张，<3s 的蓝屏会漏拍，dump 不会。
-          try {
-            @"
-            select vdisk file="$PWD\disk.vhdx"
-            attach vdisk
-            "@ | diskpart.exe | Out-Null
-            Start-Sleep -Seconds 6
-            New-Item -ItemType Directory forensics -ErrorAction Ignore | Out-Null
-            $srcs = @(
-              "V:\Windows\Minidump",
-              "V:\Windows\MEMORY.DMP",
-              "V:\Windows\Panther",
-              "V:\Windows\System32\winevt\Logs\System.evtx",
-              "V:\Windows\System32\winevt\Logs\Application.evtx",
-              "V:\Windows\bootstat.dat"
-            )
-            foreach ($s in $srcs) {
-              if (Test-Path $s) {
-                if ((Get-Item $s).PSIsContainer -or (Get-Item $s).Length -lt 800MB) {
-                  Copy-Item $s forensics\ -Recurse -Force -ErrorAction SilentlyContinue
-                  "取证: $s"
-                } else { "跳过过大文件: $s ($([math]::Round((Get-Item $s).Length/1MB))MB)" }
-              }
+          # 重挂测试盘拷出系统内证据：蓝屏 minidump、部署日志、事件日志。
+          # 注意：here-string 收尾 "@ 必须顶格（缩进会导致 ParserError，实测踩过）
+          $attach = @"
+          select vdisk file="$PWD\disk.vhdx"
+          attach vdisk
+          "@
+          $attach | diskpart.exe | Out-Null
+          Start-Sleep -Seconds 6
+          New-Item -ItemType Directory forensics -ErrorAction Ignore | Out-Null
+          $srcs = @(
+            "V:\Windows\Minidump",
+            "V:\Windows\MEMORY.DMP",
+            "V:\Windows\Panther",
+            "V:\Windows\System32\winevt\Logs\System.evtx",
+            "V:\Windows\System32\winevt\Logs\Application.evtx",
+            "V:\Windows\bootstat.dat"
+          )
+          foreach ($s in $srcs) {
+            if (Test-Path $s) {
+              $item = Get-Item $s
+              if ($item.PSIsContainer -or $item.Length -lt 800MB) {
+                Copy-Item $s forensics\ -Recurse -Force -ErrorAction SilentlyContinue
+                "取证: $s"
+              } else { "跳过大文件: $s ($([math]::Round($item.Length/1MB))MB)" }
             }
-            "── 取证清单 ──"
-            Get-ChildItem forensics -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { "$($_.FullName.Substring($PWD.Path.Length+1))  $([math]::Round($_.Length/1KB))KB" }
-          } finally {
-            @"
-            select vdisk file="$PWD\disk.vhdx"
-            detach vdisk
-            "@ | diskpart.exe | Out-Null
           }
+          "── 取证清单 ──"
+          Get-ChildItem forensics -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name)  $([math]::Round($_.Length/1KB))KB" }
+          $detach = @"
+          select vdisk file="$PWD\disk.vhdx"
+          detach vdisk
+          "@
+          $detach | diskpart.exe | Out-Null
 
       - name: 打包上传
         if: always()
