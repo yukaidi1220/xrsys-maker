@@ -1,0 +1,89 @@
+# Runner 能力探针：验证标准 windows-latest 能否承载 QEMU 镜像自动化测试。
+# 测四件事：① Hyper-V/嵌套虚拟化是否存在 ② QEMU 可装性 ③ WHPX 加速是否可用
+# ④ TCG 纯软件模拟下启动一个小 Linux 的耗时（外推 Windows 镜像测试成本）。
+name: Runner 探针
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: 虚拟化能力
+        shell: pwsh
+        run: |
+          "HypervisorPresent: $((Get-CimInstance Win32_ComputerSystem).HypervisorPresent)"
+          $hv = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -ErrorAction SilentlyContinue
+          if ($hv) { "Hyper-V 功能状态: $($hv.State)" }
+          systeminfo | Select-String 'Hyper-V'
+
+      - name: 安装 QEMU
+        shell: pwsh
+        run: |
+          choco install qemu -y --no-progress
+          $qemu = (Get-Command qemu-system-x86_64.exe -ErrorAction Stop).Source
+          "qemu 路径: $qemu"
+          qemu-system-x86_64.exe --version
+          qemu-img.exe --version
+          "qemu 路径目录: $(Split-Path $qemu)" | Out-File -Append qemu-home.txt -Encoding utf8
+
+      - name: VHDX 与 UEFI 固件支持
+        shell: pwsh
+        run: |
+          qemu-img.exe create -f vhdx probe.vhdx 1G
+          qemu-img.exe info probe.vhdx | Select-Object -First 6
+          "── edk2/UEFI 固件文件 ──"
+          $qemuDir = Split-Path (Get-Command qemu-system-x86_64.exe).Source
+          Get-ChildItem $qemuDir -Recurse -Include "*edk2*","*uefi*" -ErrorAction SilentlyContinue |
+            Select-Object -First 8 -ExpandProperty FullName
+          if (-not (Get-ChildItem $qemuDir -Recurse -Include "*edk2*" -ErrorAction SilentlyContinue)) {
+            "::warning::未找到 edk2 固件，UEFI 启动需另行获取"
+          }
+
+      - name: WHPX 探测
+        shell: pwsh
+        run: |
+          $p = Start-Process qemu-system-x86_64.exe `
+            -ArgumentList '-machine','q35','-accel','whpx','-m','512','-display','none','-monitor','none','-serial','none' `
+            -PassThru -NoNewWindow -RedirectStandardError whpx.err
+          Start-Sleep -Seconds 10
+          if ($p.HasExited) {
+            "WHPX: 不可用（exit $($p.ExitCode)），stderr 前 5 行:"
+            Get-Content whpx.err -ErrorAction SilentlyContinue | Select-Object -First 5
+          } else {
+            "WHPX: 可用（空虚拟机已持续运行 10 秒）"
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: TCG 启动计时（Alpine Linux）
+        shell: pwsh
+        run: |
+          $iso = "alpine-virt-3.20.3-x86_64.iso"
+          Invoke-WebRequest -Uri "https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/x86_64/$iso" -OutFile $iso
+          "ISO 大小: $([math]::Round((Get-Item $iso).Length / 1MB, 1)) MB"
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          $p = Start-Process qemu-system-x86_64.exe `
+            -ArgumentList '-machine','q35','-accel','tcg,thread=multi','-m','1024','-smp','2','-cdrom',$iso,'-boot','d','-display','none','-monitor','none','-serial','file:serial.log','-no-reboot' `
+            -PassThru -NoNewWindow
+          $deadline = (Get-Date).AddSeconds(300)
+          while ((Get-Date) -lt $deadline -and -not $p.HasExited) {
+            if ((Test-Path serial.log) -and (Select-String -Path serial.log -Pattern 'login:' -Quiet -ErrorAction SilentlyContinue)) { break }
+            Start-Sleep -Seconds 5
+          }
+          $reached = (Test-Path serial.log) -and (Select-String -Path serial.log -Pattern 'login:' -Quiet -ErrorAction SilentlyContinue)
+          "TCG 启动到 login 提示: $([int]$sw.Elapsed.TotalSeconds) 秒（成功=$reached）"
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          "── serial 末尾 ──"
+          Get-Content serial.log -Tail 10 -ErrorAction SilentlyContinue
+
+      - name: 上传日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-probe
+          path: |
+            serial.log
+            whpx.err
+          if-no-files-found: ignore

@@ -706,10 +706,45 @@ if ($?) { Write-Host "虚拟磁盘创建成功！" } else { Write-Error "虚拟�
 $mountDir = "S:"
 Write-Status -Step "创建虚拟磁盘" -Status "完成"
 
+# 解析映像索引（按名称匹配）：不同批次 ESD 的映像构成不一致，硬编码索引已在 21H2 上
+# 踩坑（ESD 中无索引 4，apply 秒败但脚本继续在空盘上跑，一小时后才死于无关步骤）
+Write-Host "正在解析 $osFile 的映像列表..."
+$infoLines = & .\bin\wimlib-imagex.exe info "$osFile" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "wimlib info 失败（exit $LASTEXITCODE），无法解析映像列表。"
+}
+$wimImages = @()
+$curIndex = 0
+foreach ($line in $infoLines) {
+    if ($line -match '^Index:\s*(\d+)') {
+        $curIndex = [int]$Matches[1]
+    } elseif ($line -match '^Name:\s*(.*?)\s*$' -and $curIndex -gt 0) {
+        $wimImages += [pscustomobject]@{ Index = $curIndex; Name = $Matches[1] }
+        $curIndex = 0
+    }
+}
+$imagePatterns = if ($sysVer -match '_EntS_') { @('Enterprise S$', 'LTSC$', 'Enterprise$', '企业') }
+    elseif ($sysVer -match '_Ult_') { @('Ultimate$', '旗舰') }
+    else { @('Pro$', '专业版$') }
+$selImage = $null
+foreach ($pat in $imagePatterns) {
+    $selImage = $wimImages | Where-Object { $_.Name -match $pat } | Select-Object -First 1
+    if ($selImage) { break }
+}
+if (-not $selImage) {
+    $avail = ($wimImages | ForEach-Object { "#{0} {1}" -f $_.Index, $_.Name }) -join " | "
+    Write-Error "未在 $osFile 中找到匹配（$($imagePatterns -join ' / ')）的映像。可用映像: $avail"
+}
+$osIndex = $selImage.Index
+Write-Host "按名称选定映像 #$osIndex「$($selImage.Name)」（共 $($wimImages.Count) 个映像）"
+
 # extract imagefile use wimlib-imagex
 Write-Host "正在释放 $osFile，请稍候..."
 Write-Status -Step "释放镜像(wimlib apply)" -Status "开始"
-Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("apply", "$osFile", $osIndex, "$mountDir")
+$applyExit = Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("apply", "$osFile", $osIndex, "$mountDir")
+if ($applyExit -ne 0) {
+    Write-Error "wimlib apply 失败（exit $applyExit），镜像未释放，中止。"
+}
 Write-Status -Step "释放镜像(wimlib apply)" -Status "完成"
 # inject deploy
 Write-Status -Step "注入部署文件" -Status "开始"
@@ -895,8 +930,11 @@ ${sysver}_${sysdate}
 # Write-Host "Packing $sysFile.wim, please wait..."
 # New-WindowsImage -ImagePath ".\$sysFile.wim" -CapturePath "$mountDir" -Name $sysVer -Description $sysVerCN
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "开始"
-Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("capture", "$mountDir", "$sysFile.esd", "$sysVer", "$sysVerCN", "--solid", "--compress=lzms:34", "--threads=6", "--solid-chunk-size=128M", "--image-property", "DISPLAYNAME=$sysVer", "--image-property", "DISPLAYDESCRIPTION=$sysVerCN")
-if ($?) { Write-Host "镜像捕获成功！" } else { Write-Error "镜像捕获失败！" }
+$captureExit = Invoke-Wimlib -FilePath ".\bin\wimlib-imagex.exe" -Arguments @("capture", "$mountDir", "$sysFile.esd", "$sysVer", "$sysVerCN", "--solid", "--compress=lzms:34", "--threads=6", "--solid-chunk-size=128M", "--image-property", "DISPLAYNAME=$sysVer", "--image-property", "DISPLAYDESCRIPTION=$sysVerCN")
+if ($captureExit -ne 0) {
+    Write-Error "wimlib capture 失败（exit $captureExit），未产出 $sysFile.esd。"
+}
+Write-Host "镜像捕获成功！"
 Write-Status -Step "捕获镜像(wimlib capture)" -Status "完成"
 
 # clean up mount dir
