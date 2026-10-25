@@ -23,11 +23,16 @@ jobs:
         shell: pwsh
         run: |
           choco install qemu -y --no-progress
-          $qemu = (Get-Command qemu-system-x86_64.exe -ErrorAction Stop).Source
+          # choco 的 qemu 包装到 Program Files 后不进 PATH，按已知位置找
+          $qemu = Get-ChildItem "C:\Program Files\qemu" -Filter qemu-system-x86_64.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $qemu) {
+            $qemu = Get-ChildItem "C:\ProgramData\chocolatey\lib" -Filter qemu-system-x86_64.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $qemu) { Write-Error "找不到 qemu-system-x86_64.exe" }
           "qemu 路径: $qemu"
-          qemu-system-x86_64.exe --version
+          Add-Content $env:GITHUB_PATH (Split-Path $qemu)
+          & $qemu --version
           qemu-img.exe --version
-          "qemu 路径目录: $(Split-Path $qemu)" | Out-File -Append qemu-home.txt -Encoding utf8
 
       - name: VHDX 与 UEFI 固件支持
         shell: pwsh
