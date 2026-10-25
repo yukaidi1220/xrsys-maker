@@ -20,17 +20,17 @@ on:
         required: false
         default: "6"
       run_minutes:
-        description: "开机测试最长时长（分钟）"
+        description: "开机测试最长时长（分钟）——部署链实测 4 次开机总耗时 >60min"
         required: false
-        default: "40"
+        default: "100"
       accel:
-        description: "QEMU 加速器（默认 tcg 稳妥；whpx 快但 Win11 引导期可能报 VP exit code 4 崩溃）"
+        description: "QEMU 加速器（whpx=验证可用；tcg 极慢无法出固件；irqchip=off 会早期挂死）"
         required: false
-        default: "tcg,thread=multi"
+        default: "whpx"
       cpu_model:
-        description: "CPU 型号（空=默认。whpx 崩 VP exit 4 时可试 Skylake-Client / max）"
+        description: "CPU 型号（Skylake-Client=验证可用；qemu64 两分半必崩 VP exit 4）"
         required: false
-        default: ""
+        default: "Skylake-Client"
       smp:
         description: "vCPU 数（WHPX 多核竞态可试 2/1）"
         required: false
@@ -43,9 +43,9 @@ on:
         description: "最多开机次数（部署流程实测会连续重启 3+ 次，默认 5）"
         required: false
         default: "5"
-  # schedule:
-  #   # 每天抽查一个目标（先手动验证跑通后再启用）
-  #   - cron: "40 17 * * *"
+  schedule:
+    # 每天抽查一次默认目标（2026-10-25 全链验证通过后启用；01:40 CST）
+    - cron: "40 17 * * *"
 
 jobs:
   boot-test:
