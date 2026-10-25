@@ -23,6 +23,10 @@ on:
         description: "开机测试最长时长（分钟）"
         required: false
         default: "40"
+      accel:
+        description: "QEMU 加速器（默认 tcg 稳妥；whpx 快但 Win11 引导期可能报 VP exit code 4 崩溃）"
+        required: false
+        default: "tcg,thread=multi"
   # schedule:
   #   # 每天抽查一个目标（先手动验证跑通后再启用）
   #   - cron: "40 17 * * *"
@@ -155,7 +159,7 @@ jobs:
           "固件: $edk2"
           New-Item -ItemType Directory shots | Out-Null
           # 整串传参并内嵌引号：路径含空格（C:\Program Files）时数组参数会被拆散
-          $argString = "-machine q35 -accel whpx -accel tcg -m ${{ inputs.mem_gb }}G -smp 4 " +
+          $argString = "-machine q35 -accel ${{ inputs.accel }} -m ${{ inputs.mem_gb }}G -smp 4 " +
             "-drive `"file=disk.vhdx,format=vhdx,if=none,id=hd0`" " +
             "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 " +
             "-drive `"if=pflash,format=raw,readonly=on,file=$edk2`" " +
