@@ -62,8 +62,10 @@ jobs:
           Add-Content $env:GITHUB_PATH (Split-Path $qemu)
           & $qemu --version
           Invoke-WebRequest -Uri "https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/wimlib-1.14.4-windows-x86_64-bin.zip" -OutFile wimlib.zip
-          Expand-Archive wimlib.zip -DestinationPath bin -Force
-          Move-Item "bin\wimlib-1.14.4-windows-x86_64-bin\*" bin -Force
+          Expand-Archive wimlib.zip -DestinationPath bin\wimlib -Force
+          # 该 zip 无顶层目录，直接平铺拷出两个需要的文件
+          Copy-Item bin\wimlib\wimlib-imagex.exe bin\ -Force
+          Copy-Item bin\wimlib\libwim-15.dll bin\ -Force
           .\bin\wimlib-imagex.exe --version
 
       - name: 下载 ESD
