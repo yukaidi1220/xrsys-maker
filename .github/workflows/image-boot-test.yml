@@ -144,7 +144,12 @@ jobs:
       - name: 写引导（bcdboot）
         shell: pwsh
         run: |
-          & "V:\Windows\System32\bcdboot.exe" V:\Windows /s Y: /f UEFI
+          # 优先用宿主 bcdboot：镜像内 bcdboot（28000）在 26100 宿主上报 BFSVC 错误；
+          # 宿主 bootmgr 向后兼容加载新 OS 的 winload 是标准做法
+          $bcd = "C:\Windows\System32\bcdboot.exe"
+          if (-not (Test-Path $bcd)) { $bcd = "V:\Windows\System32\bcdboot.exe" }
+          "使用: $bcd"
+          & $bcd V:\Windows /s Y: /f UEFI /v
           if ($LASTEXITCODE -ne 0) { Write-Error "bcdboot 失败（exit $LASTEXITCODE）" }
           Get-ChildItem Y:\EFI -Recurse -Filter "*.efi" | Select-Object -First 5 -ExpandProperty FullName
 
