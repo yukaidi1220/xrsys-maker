@@ -224,7 +224,7 @@ jobs:
           New-Item -ItemType Directory shots | Out-Null
           # 整串传参并内嵌引号：路径含空格（C:\Program Files）时数组参数会被拆散
           $argString = "-machine q35 -accel ${{ inputs.accel }} -m ${{ inputs.mem_gb }}G -smp ${{ inputs.smp || '4' }} " +
-            "-drive `"file=disk.vhdx,format=vhdx,if=none,id=hd0,cache=writethrough`" " +
+            "-drive `"file=disk.vhdx,format=vhdx,if=none,id=hd0`" " +
             "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 " +
             "-drive `"if=pflash,format=raw,readonly=on,file=$edk2`" " +
             "-netdev user,id=n0 -device e1000,netdev=n0 " +
