@@ -47,6 +47,18 @@ on:
         description: "并行尝试次数（GH runner 池存在对 WHPX 客户机不友好的宿主机，2=失败自动换机重试）"
         required: false
         default: "2"
+      machine:
+        description: "机器型号（q35=现代PCIe+AHCI；pc=i440fx 老式IDE，模拟最成熟）"
+        required: false
+        default: "q35"
+      disk:
+        description: "QEMU 磁盘格式（vhdx=现状；qcow2=建盘后转换，QEMU 原生格式最稳定）"
+        required: false
+        default: "vhdx"
+      nic:
+        description: "网卡型号（e1000=现状；none=去掉网卡排除变量，部署离线不需要）"
+        required: false
+        default: "e1000"
   schedule:
     # 每天抽查一次默认目标（2026-10-25 全链验证通过后启用；01:40 CST）
     - cron: "40 17 * * *"
@@ -216,6 +228,15 @@ jobs:
           detach vdisk
           "@ | diskpart.exe | Out-Null
           "VHDX 已卸载，交给 QEMU"
+          # qcow2 模式：建盘/释放走 Windows 原生工具，开 QEMU 前转成 QEMU 原生格式
+          if ("${{ inputs.disk }}" -eq "qcow2") {
+            $qemuImg = Join-Path (Split-Path (Get-Command qemu-system-x86_64.exe).Source) "qemu-img.exe"
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            & $qemuImg convert -f vhdx -O qcow2 -p disk.vhdx disk.qcow2
+            if ($LASTEXITCODE -ne 0) { Write-Error "VHDX→qcow2 转换失败（exit $LASTEXITCODE）" }
+            Remove-Item disk.vhdx -Force
+            "已转 qcow2 并删除 VHDX，耗时 $([int]$sw.Elapsed.TotalSeconds)s，大小 $([math]::Round((Get-Item disk.qcow2).Length/1GB,2))GB"
+          }
 
       - name: QEMU 开机 + 每 3 秒截图
         shell: pwsh
@@ -226,12 +247,22 @@ jobs:
           "固件: $edk2"
           New-Item -ItemType Directory shots | Out-Null
           # 整串传参并内嵌引号：路径含空格（C:\Program Files）时数组参数会被拆散
-          $argString = "-machine q35 -accel ${{ inputs.accel }} -m ${{ inputs.mem_gb }}G -smp ${{ inputs.smp || '4' }} " +
-            "-drive `"file=disk.vhdx,format=vhdx,if=none,id=hd0`" " +
-            "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 " +
+          $diskFile = if ("${{ inputs.disk }}" -eq "qcow2") { "disk.qcow2" } else { "disk.vhdx" }
+          $diskFmt = if ("${{ inputs.disk }}" -eq "qcow2") { "qcow2" } else { "vhdx" }
+          $argString = "-machine ${{ inputs.machine }} -accel ${{ inputs.accel }} -m ${{ inputs.mem_gb }}G -smp ${{ inputs.smp || '4' }} " +
+            "-drive `"file=$diskFile,format=$diskFmt,if=none,id=hd0`" "
+          if ("${{ inputs.machine }}" -eq "q35") {
+            $argString += "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 "
+          } else {
+            # i440fx(pc)：PIIX 老 IDE，Windows 自带驱动、QEMU 模拟最成熟
+            $argString += "-device ide-hd,drive=hd0 "
+          }
+          $argString +=
             "-drive `"if=pflash,format=raw,readonly=on,file=$edk2`" " +
-            "-netdev user,id=n0 -device e1000,netdev=n0 " +
             "-display none -qmp tcp:127.0.0.1:4444,server,nowait"
+          if ("${{ inputs.nic }}" -ne "none") {
+            $argString += " -netdev user,id=n0 -device ${{ inputs.nic }},netdev=n0"
+          }
           $cpuModel = "${{ inputs.cpu_model }}".Trim()
           if ($cpuModel) { $argString += " -cpu $cpuModel" }
           "QEMU 参数: $argString"
@@ -365,12 +396,19 @@ jobs:
           # 重挂测试盘拷出系统内证据：蓝屏 minidump、部署日志、事件日志。
           # 注意：here-string 收尾 "@ 必须顶格（缩进会导致 ParserError，实测踩过）
           # 取证 = best-effort：整体 try/catch 永不掀翻步骤（盘符乱值曾炸 Join-Path、Set-Partition 也炸过）
+          # qcow2 模式取证：转回 VHDX 副本再挂载（diskpart 只认 VHDX）
+          $vfile = "disk.vhdx"
+          if ("${{ inputs.disk }}" -eq "qcow2" -and (Test-Path disk.qcow2)) {
+            $qemuImg2 = Join-Path (Split-Path (Get-Command qemu-system-x86_64.exe).Source) "qemu-img.exe"
+            & $qemuImg2 convert -f qcow2 -O vhdx disk.qcow2 forensic.vhdx 2>&1 | Out-Null
+            if (Test-Path forensic.vhdx) { $vfile = "forensic.vhdx"; "qcow2 已转出取证副本 forensic.vhdx" }
+          }
           $attach = @"
-          select vdisk file="$PWD\disk.vhdx"
+          select vdisk file="$PWD\$vfile"
           attach vdisk
           "@
           $detach = @"
-          select vdisk file="$PWD\disk.vhdx"
+          select vdisk file="$PWD\$vfile"
           detach vdisk
           "@
           try {
