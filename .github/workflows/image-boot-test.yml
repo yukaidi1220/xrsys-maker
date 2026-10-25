@@ -68,8 +68,9 @@ on:
         required: false
         default: "false"
   schedule:
-    # 每天抽查一次默认目标（2026-10-25 全链验证通过后启用；01:40 CST）
-    - cron: "40 17 * * *"
+    # 每天抽查一次默认目标（UTC 04:40 = 北京 12:40，避开美东早高峰——17:40 UTC 档
+    # 实测整班被 GitHub 吞掉不触发）
+    - cron: "40 4 * * *"
 
 jobs:
   boot-test:
