@@ -43,6 +43,10 @@ on:
         description: "最多开机次数（部署流程实测会连续重启 3+ 次，默认 5）"
         required: false
         default: "5"
+      attempts:
+        description: "并行尝试次数（GH runner 池存在对 WHPX 客户机不友好的宿主机，2=失败自动换机重试）"
+        required: false
+        default: "2"
   schedule:
     # 每天抽查一次默认目标（2026-10-25 全链验证通过后启用；01:40 CST）
     - cron: "40 17 * * *"
@@ -51,6 +55,13 @@ jobs:
   boot-test:
     runs-on: ${{ inputs.runner || 'windows-latest' }}
     timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        # runner 池有对 WHPX 不友好的宿主机（实测 13:00 起连续 4 局同死法）：
+        # 双 attempt 并行、各拿不同宿主机；前面的 attempt 失败不算数，最后一个定胜负
+        attempt: ${{ (inputs.attempts || '2') == '1' && fromJSON('["1"]') || fromJSON('["1","2"]') }}
+    continue-on-error: ${{ matrix.attempt != (inputs.attempts || '2') }}
     steps:
 
       - name: 安装 QEMU 与 wimlib
@@ -396,7 +407,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: boot-shots-${{ inputs.image_index }}
+          name: boot-shots-${{ inputs.image_index }}-a${{ matrix.attempt }}
           path: |
             shots/
             qemu-stderr-*.log
