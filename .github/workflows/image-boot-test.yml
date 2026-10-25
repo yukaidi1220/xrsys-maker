@@ -40,9 +40,9 @@ on:
         required: false
         default: "windows-latest"
       boot_rounds:
-        description: "最多开机次数（部署流程实测会连续重启 3+ 次，默认 6）"
+        description: "最多开机次数（部署流程实测会连续重启 3+ 次，默认 5）"
         required: false
-        default: "6"
+        default: "5"
   # schedule:
   #   # 每天抽查一个目标（先手动验证跑通后再启用）
   #   - cron: "40 17 * * *"
