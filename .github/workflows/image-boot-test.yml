@@ -60,9 +60,13 @@ on:
         required: false
         default: "e1000"
       bcdboot:
-        description: "写引导用的 bcdboot（host=宿主机版本，会用宿主 EFI 文件有缝合风险；image=镜像自带版本）"
+        description: "写引导用的 bcdboot（host=宿主机版本；image=镜像自带，实测在宿主 exit -1058471934 不可用）"
         required: false
         default: "host"
+      esp_native:
+        description: "ESP 原生化：bcdboot 后用镜像 EX 版引导文件覆盖 ESP（消除宿主版缝合，true/false）"
+        required: false
+        default: "false"
   schedule:
     # 每天抽查一次默认目标（2026-10-25 全链验证通过后启用；01:40 CST）
     - cron: "40 17 * * *"
@@ -198,6 +202,16 @@ jobs:
           "使用: $bcd"
           & $bcd V:\Windows /s Y: /f UEFI /v
           if ($LASTEXITCODE -ne 0) { Write-Error "bcdboot 失败（exit $LASTEXITCODE）" }
+          if ("${{ inputs.esp_native }}" -eq "true") {
+            # 宿主 bcdboot 会把宿主版引导文件缝进 ESP；用镜像原生 EX 版覆盖，引导链全程镜像同源
+            foreach ($map in @(
+              @("V:\Windows\boot\EFI_EX\bootmgfw_EX.efi", "Y:\EFI\Microsoft\Boot\bootmgfw.efi"),
+              @("V:\Windows\boot\EFI_EX\bootx64_EX.efi", "Y:\EFI\Boot\bootx64.efi")
+            )) {
+              if (Test-Path $map[0]) { Copy-Item $map[0] $map[1] -Force; "ESP 原生化: $($map[0]) → $($map[1])" }
+              else { "::warning::ESP 原生化缺少源文件 $($map[0])" }
+            }
+          }
           Get-ChildItem Y:\EFI -Recurse -Filter "*.efi" | Select-Object -First 5 -ExpandProperty FullName
 
       - name: 校验引导（BCD + EFI 文件）
