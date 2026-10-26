@@ -989,6 +989,8 @@ $stream.Close(); $md5.Dispose(); $sha256.Dispose()
         "md5"      = $sysFileMD5
         "sha256"   = $sysFileSHA256
         "url"      = "$Server/d/cr/qzy-hk/System/Nightly/$sysDate/$sysFile.esd"
+        # 开机测试视频（image-boot-test 绿局上传到同目录，供 EEEOS-GET 前端展示）
+        "video"    = "$Server/d/cr/qzy-hk/System/Nightly/$sysDate/$($sysFile)_测试视频.mp4"
     }
     "os"  = @{
         "arch"    = $osArch

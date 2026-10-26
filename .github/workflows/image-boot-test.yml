@@ -564,28 +564,39 @@ jobs:
             "video_name=$videoName" >> $env:GITHUB_OUTPUT
           }
 
+      - name: 获取 rclone 配置与二进制（私有仓）
+        if: success() && inputs.use_latest
+        uses: actions/checkout@v6
+        with:
+          repository: yukaidi1220/rclone-action
+          token: ${{ secrets.RCLONE_TOKEN }}
+          path: rclone-bin
+
       - name: 上传测试视频到网盘（供 EEEOS-GET 前端取用）
-        if: success()
+        id: upload_video
+        if: success() && inputs.use_latest
         shell: pwsh
         run: |
-          # 视频随镜像一起发布：与 ESD 同目录（Nightly/<构建日期>/），并在指针 JSON 里
-          # 加 video 字段，EEEOS-GET 构建时可直接读到测试视频链接
+          # 视频随镜像一起发布：与 ESD 同目录（Nightly/<构建日期>/）。
+          # 注意该目录受 cleanup-builds 版本保留管理（30天/最近3个目录/指针引用保护）
           $esdUrl = "${{ steps.resolve.outputs.esd_url }}"
-          if (-not $esdUrl) { "::warning::无 ESD 地址，跳过视频上传"; exit 0 }
           $videoName = "${{ steps.video.outputs.video_name }}"
-          if (-not $videoName -or -not (Test-Path $videoName)) { "::warning::无视频文件，跳过上传"; exit 0 }
-          if (-not (Test-Path .\bin\rclone.exe)) {
-            Invoke-WebRequest -Uri "https://github.com/yukaidi1220/rclone/releases/latest/download/rclone-cdn-windows-amd64.exe" -OutFile .\bin\rclone.exe
-          }
-          $conf = Join-Path $env:RUNNER_TEMP "rclone.conf"
-          "${{ secrets.RCLONE_TOKEN }}" | Out-File $conf -Encoding utf8
-          # ESD 形如 .../Nightly/2026.07.22/xxx.esd → 视频传到同目录
+          if (-not $esdUrl -or -not $videoName -or -not (Test-Path $videoName)) { "::warning::无 ESD 地址或视频文件，跳过上传"; exit 0 }
+          Invoke-WebRequest -Uri "https://github.com/yukaidi1220/rclone/releases/latest/download/rclone-cdn-windows-amd64.exe" -OutFile rclone-bin\rclone.exe
+          $conf = "rclone-bin\rclone.conf"
+          if (-not (Test-Path $conf)) { "::warning::私有仓无 rclone.conf，跳过视频上传"; exit 0 }
+          # ESD 形如 https://res.yukaidi.top/d/cr/qzy-hk/System/Nightly/2026.07.22/x.esd
+          # → cloudreve:/File/System/Nightly/2026.07.22/
           $esdPath = ([Uri]$esdUrl).AbsolutePath
-          $dir = ($esdPath -replace '^/d/', '/').Substring(0, $esdPath.LastIndexOf('/'))
-          "上传 $videoName → cloudreve:${dir}/"
-          & .\bin\rclone.exe copy $videoName "cloudreve:$dir/" --config $conf --progress
+          if ($esdPath -match '/(File/System/Nightly/[^/]+)/') { $remoteDir = $Matches[1] }
+          else { Write-Error "无法从 ESD 路径解析 Nightly 目录: $esdPath" }
+          "上传 $videoName → cloudreve:/$remoteDir/"
+          & rclone-bin\rclone.exe copy $videoName "cloudreve:/$remoteDir/" --config $conf --progress
           if ($LASTEXITCODE -ne 0) { "::warning::视频上传失败（exit $LASTEXITCODE）" }
-          else { "视频已上传：${{ inputs.esd_ver }}/$dir/$videoName" }
+          else {
+            "视频已上传: cloudreve:/$remoteDir/$videoName"
+            "video_url=$esdUrl" >> $env:GITHUB_OUTPUT
+          }
 
       - name: 赛后取证（minidump / Panther / 事件日志）
         if: always()
