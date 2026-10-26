@@ -75,9 +75,8 @@ on:
         description: "ESP 原生化：bcdboot 后用镜像 EX 版引导文件覆盖 ESP（消除宿主版缝合，true/false）"
         required: false
         default: "false"
-  schedule:
-    # 每天抽查当日最新 nightly 构建（北京时间 04:30 = UTC 20:30，即构建 cron 00:00 后 4.5h）
-    - cron: "30 20 * * *"
+  # 定时已移除：改由 schedule-maker 在每日构建完成后自动触发（测当日构建出的所有版本）。
+  # 若需单独定时抽查某个版本，用 workflow_dispatch 手动派发即可。
 
 jobs:
   boot-test:
