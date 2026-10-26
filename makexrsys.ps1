@@ -710,8 +710,12 @@ if ($?) { Write-Host "虚拟磁盘创建成功！" } else { Write-Error "虚拟�
 $mountDir = "S:"
 Write-Status -Step "创建虚拟磁盘" -Status "完成"
 
-# 解析映像索引（按名称匹配）：不同批次 ESD 的映像构成不一致，硬编码索引已在 21H2 上
-# 踩坑（ESD 中无索引 4，apply 秒败但脚本继续在空盘上跑，一小时后才死于无关步骤）
+# 解析映像索引：硬编码索引优先，越界/不存在时才回退按名称匹配。
+# 历史沿革：各 target 的硬编码 $osIndex 长期正常工作（Pro=4、LTSC=1、Win7=1…）；
+# 2026-10-25 修 21H2 时改成纯按名匹配（因为 21H2 的 ESD 没有索引 4），顺手把
+# LTSC 也纳入按名匹配，而正则 'Enterprise S$' 匹配不上真实名 'EnterpriseS'
+# → LTSC 系列从那天起构建全灭。恢复为"硬编码优先"既保住历史正确行为，
+# 又能在 ESD 映像构成变化时（如 21H2 单映像）自动兜底。
 Write-Host "正在解析 $osFile 的映像列表..."
 $infoLines = & .\bin\wimlib-imagex.exe info "$osFile" 2>$null
 if ($LASTEXITCODE -ne 0) {
@@ -727,25 +731,29 @@ foreach ($line in $infoLines) {
         $curIndex = 0
     }
 }
-# 多版本母盘取家庭中文版（CoreCountrySpecific，DISM 随后转全版本，见 MSUpdate
-# msupdate.ps1 :makefromccs）；EntS/Ult 走各自基色；老批次单映像 ESD（如 21H2）
-# 无多版本，靠回退模式兜底。
-# 注意：微软镜像里的 edition 名是「EnterpriseS」（不带空格，如 "Windows 11 EnterpriseS"），
-# 早期写成 'Enterprise S$' 导致 LTSC2024 构建全灭（实测 2026-10-26 构建矩阵 4 个失败）
-$imagePatterns = if ($sysVer -match '_EntS_') { @('^Windows \d+ EnterpriseS$', 'EnterpriseS', 'Enterprise S', 'LTSC', '企业') }
-    elseif ($sysVer -match '_Ult_') { @('Ultimate$', '旗舰') }
-    else { @('CoreCountrySpecific', '家庭中文版', 'CoreSingleLanguage', '家庭单语言', 'Pro$', '专业版$') }
-$selImage = $null
-foreach ($pat in $imagePatterns) {
-    $selImage = $wimImages | Where-Object { $_.Name -match $pat } | Select-Object -First 1
-    if ($selImage) { break }
+$avail = ($wimImages | ForEach-Object { "#{0} {1}" -f $_.Index, $_.Name }) -join " | "
+$selImage = $wimImages | Where-Object { $_.Index -eq $osIndex } | Select-Object -First 1
+if ($selImage) {
+    Write-Host "使用硬编码索引 #$osIndex「$($selImage.Name)」（共 $($wimImages.Count) 个映像）"
+} else {
+    # 硬编码索引在该 ESD 中不存在 → 按名称兜底
+    Write-Host "硬编码索引 #$osIndex 不存在，回退按名称匹配…"
+    # 多版本母盘取家庭中文版（CoreCountrySpecific，DISM 随后转全版本，见 MSUpdate
+    # msupdate.ps1 :makefromccs）；EntS/Ult 走各自基色；老批次单映像 ESD（如 21H2）
+    # 无多版本，靠回退模式兜底。注意 EntS 的真实映像名是「EnterpriseS」（无空格）。
+    $imagePatterns = if ($sysVer -match '_EntS_') { @('^Windows \d+ EnterpriseS$', 'EnterpriseS', 'Enterprise S', 'LTSC', '企业') }
+        elseif ($sysVer -match '_Ult_') { @('Ultimate$', '旗舰') }
+        else { @('CoreCountrySpecific', '家庭中文版', 'CoreSingleLanguage', '家庭单语言', 'Pro$', '专业版$') }
+    foreach ($pat in $imagePatterns) {
+        $selImage = $wimImages | Where-Object { $_.Name -match $pat } | Select-Object -First 1
+        if ($selImage) { break }
+    }
+    if (-not $selImage) {
+        Write-Error "索引 #$osIndex 不存在，按名称（$($imagePatterns -join ' / ')）也匹配不到。可用映像: $avail"
+    }
+    $osIndex = $selImage.Index
+    Write-Host "按名称选定映像 #$osIndex「$($selImage.Name)」（共 $($wimImages.Count) 个映像）"
 }
-if (-not $selImage) {
-    $avail = ($wimImages | ForEach-Object { "#{0} {1}" -f $_.Index, $_.Name }) -join " | "
-    Write-Error "未在 $osFile 中找到匹配（$($imagePatterns -join ' / ')）的映像。可用映像: $avail"
-}
-$osIndex = $selImage.Index
-Write-Host "按名称选定映像 #$osIndex「$($selImage.Name)」（共 $($wimImages.Count) 个映像）"
 
 # extract imagefile use wimlib-imagex
 Write-Host "正在释放 $osFile，请稍候..."
