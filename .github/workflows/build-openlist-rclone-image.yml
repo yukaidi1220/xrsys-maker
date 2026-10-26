@@ -1,0 +1,45 @@
+# 构建并推送 OpenList+rclone 集成镜像到 GHCR。
+# 服务器部署主线：docker pull ghcr.io/yukaidi1220/openlist-rclone:latest
+# （国内服务器现场构建会挂在 github 前端 tarball 下载 + go mod，见 Dockerfile.rclone 注释）
+name: build-openlist-rclone-image
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-openlist-rclone-image.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout OpenList fork (main)
+        uses: actions/checkout@v4
+        with:
+          repository: yukaidi1220/OpenList
+          ref: main
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        run: docker build -f Dockerfile.rclone -t ghcr.io/yukaidi1220/openlist-rclone:latest -t ghcr.io/yukaidi1220/openlist-rclone:${{ github.run_number }} .
+
+      - name: 冒烟（镜像内二进制）
+        run: |
+          docker run --rm --entrypoint /bin/sh ghcr.io/yukaidi1220/openlist-rclone:latest -c '
+            test -x /opt/openlist/openlist && test -x /opt/rclone/rclone &&
+            /opt/openlist/openlist version | head -n 1 &&
+            /opt/rclone/rclone version | head -n 1 && id'
+
+      - name: Push
+        run: docker push ghcr.io/yukaidi1220/openlist-rclone:latest && docker push ghcr.io/yukaidi1220/openlist-rclone:${{ github.run_number }}
