@@ -1,0 +1,76 @@
+# 在 rclone-action 仓运行（Actions 可用）：clone OpenList fork main，
+# 构建 Dockerfile.rclone 并做容器端到端断言。
+name: verify-openlist-rclone-image
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout OpenList fork (main)
+        uses: actions/checkout@v4
+        with:
+          repository: yukaidi1220/OpenList
+          ref: main
+          path: openlist-src
+
+      - name: 确保 Docker 可用
+        run: |
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "self-hosted 上无 docker，尝试安装 docker.io..."
+            sudo apt-get update -qq && sudo apt-get install -y -qq docker.io >/dev/null
+            sudo systemctl start docker || sudo service docker start || true
+          fi
+          docker version --format 'client={{.Client.Version}} server={{.Server.Version}}'
+
+      - name: 构建 Dockerfile.rclone
+        working-directory: openlist-src
+        run: |
+          # 自托管 runner 可能需要 sudo 跑 docker
+          D="docker"; command -v sudo >/dev/null && ! docker info >/dev/null 2>&1 && D="sudo docker" || true
+          echo "使用: $D"
+          cd openlist-src
+          $D build -f Dockerfile.rclone -t openlist-rclone:verify .
+
+      - name: 断言镜像内容
+        run: |
+          set -e
+          D="docker"; command -v sudo >/dev/null && ! docker info >/dev/null 2>&1 && D="sudo docker" || true
+          $D run --rm --entrypoint /bin/sh openlist-rclone:verify -c '
+            test -x /opt/openlist/openlist && echo "OK openlist 二进制存在"
+            test -x /entrypoint.sh && echo "OK entrypoint 存在可执行"
+            test -x /opt/rclone/rclone && echo "OK rclone 存在可执行"
+            test -x /opt/service/stop/rclone/run && echo "OK runsv 服务脚本存在"
+            /opt/openlist/openlist version | head -n 1
+            /opt/rclone/rclone version | head -n 1
+            id
+          '
+
+      - name: 容器启动 + 双进程 + 端到端
+        run: |
+          set -e
+          D="docker"; command -v sudo >/dev/null && ! docker info >/dev/null 2>&1 && D="sudo docker" || true
+          $D run -d --name verify \
+            -e RUN_RCLONE=true -e RUN_ARIA2=false \
+            -e RCLONE_RC_ADDR=127.0.0.1:5572 \
+            -e RCLONE_RC_USER=probe -e RCLONE_RC_PASS=probe123 \
+            openlist-rclone:verify
+          sleep 12
+          echo "── 容器内进程 ──"
+          $D exec verify sh -c "ps aux | grep -E 'openlist server|rclone rcd' | grep -v grep"
+          $D exec verify sh -c "ps aux | grep -c '[o]penlist server'" | grep -q "[1-9]" && echo "OK openlist 在跑"
+          $D exec verify sh -c "ps aux | grep -c '[r]clone rcd'" | grep -q "[1-9]" && echo "OK rcd 在跑"
+          echo "── OpenList ping ──"
+          $D exec verify wget -qO- http://127.0.0.1:5244/ping && echo
+          echo "── rcd about（无凭据应报配置错而非连接错）──"
+          $D exec verify /opt/rclone/rclone rc \
+            --url http://127.0.0.1:5572 --rc-user probe --rc-pass probe123 \
+            operations/about fs=cloudreve: 2>&1 | head -c 300 || true
+          echo "── runsv 服务目录 ──"
+          $D exec verify ls /opt/service/start/
+
+      - name: 清理
+        if: always()
+        run: $D rm -f verify 2>/dev/null || true
