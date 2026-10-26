@@ -1,0 +1,59 @@
+# Cloudreve 上传往返验证：fork rclone（cloudreve 后端）在 CI 环境的可用性证明。
+# 放在公开仓（免费 runner）；凭据从机密仓 rclone-action checkout 取。
+# 流程：随机 8MB 文件 → 上传 → 拉回 → SHA256 比对 → 清理。附带 rclone link 探测
+# （为 OpenList rclone 驱动的取链设计收集证据；链接输出截断防泄漏）。
+name: cloudreve-roundtrip-test
+on:
+  workflow_dispatch:
+
+jobs:
+  roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检出 rclone 配置（凭据仓）
+        uses: actions/checkout@v4
+        with:
+          repository: yukaidi1220/rclone-action
+          token: ${{ secrets.RCLONE_TOKEN }}
+          path: _creds
+
+      - name: 准备 fork rclone
+        run: |
+          # 动态取最新非 draft release 的 linux amd64 资产（draft 的资产不可下载）
+          URL=$(curl -s https://api.github.com/repos/yukaidi1220/rclone/releases | grep -v '"draft": true' | grep -o '"browser_download_url": "[^"]*rclone-cdn-linux-amd64"' | head -n 1 | cut -d'"' -f4)
+          URL=${URL:-https://github.com/yukaidi1220/rclone/releases/download/v1.76.0-cdn.21/rclone-cdn-linux-amd64}
+          echo "下载: $URL"
+          curl -sSL --retry 3 -o rclone "$URL"
+          chmod +x rclone
+          ./rclone version | head -n 2
+
+      - name: 验证认证与目录列表
+        run: |
+          ./rclone --config _creds/rclone.conf lsd cloudreve: 2>&1 | head -n 8
+
+      - name: 上传 → 下载 → SHA256 往返
+        run: |
+          set -e
+          TESTDIR="cloudreve:File/eeeos-ci-test-${{ github.run_id }}"
+          head -c 8388608 /dev/urandom > test.bin
+          SRC=$(sha256sum test.bin | cut -d' ' -f1)
+          echo "本地 SHA256: $SRC"
+          ./rclone --config _creds/rclone.conf mkdir "$TESTDIR"
+          ./rclone --config _creds/rclone.conf copy test.bin "$TESTDIR/" 2>&1 | tail -n 3
+          ./rclone --config _creds/rclone.conf lsl "$TESTDIR/test.bin"
+          DST=$(./rclone --config _creds/rclone.conf cat "$TESTDIR/test.bin" | sha256sum | cut -d' ' -f1)
+          echo "远程往返 SHA256: $DST"
+          if [ "$SRC" != "$DST" ]; then echo "::error::往返哈希不一致"; exit 1; fi
+          echo "✅ 上传下载往返哈希一致"
+
+      - name: rclone link 探测（OpenList 取链设计证据）
+        run: |
+          # 输出截断前 40 字符，防共享 token 进日志
+          ./rclone --config _creds/rclone.conf link "cloudreve:File/eeeos-ci-test-${{ github.run_id }}/test.bin" 2>&1 | cut -c1-40 || true
+
+      - name: 清理
+        if: always()
+        run: ./rclone --config _creds/rclone.conf purge "cloudreve:File/eeeos-ci-test-${{ github.run_id }}" 2>&1 | tail -n 1 || true
