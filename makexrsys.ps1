@@ -729,8 +729,10 @@ foreach ($line in $infoLines) {
 }
 # 多版本母盘取家庭中文版（CoreCountrySpecific，DISM 随后转全版本，见 MSUpdate
 # msupdate.ps1 :makefromccs）；EntS/Ult 走各自基色；老批次单映像 ESD（如 21H2）
-# 无多版本，靠回退模式兜底
-$imagePatterns = if ($sysVer -match '_EntS_') { @('Enterprise S$', 'LTSC$', 'Enterprise$', '企业') }
+# 无多版本，靠回退模式兜底。
+# 注意：微软镜像里的 edition 名是「EnterpriseS」（不带空格，如 "Windows 11 EnterpriseS"），
+# 早期写成 'Enterprise S$' 导致 LTSC2024 构建全灭（实测 2026-10-26 构建矩阵 4 个失败）
+$imagePatterns = if ($sysVer -match '_EntS_') { @('^Windows \d+ EnterpriseS$', 'EnterpriseS', 'Enterprise S', 'LTSC', '企业') }
     elseif ($sysVer -match '_Ult_') { @('Ultimate$', '旗舰') }
     else { @('CoreCountrySpecific', '家庭中文版', 'CoreSingleLanguage', '家庭单语言', 'Pro$', '专业版$') }
 $selImage = $null
