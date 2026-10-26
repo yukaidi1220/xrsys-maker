@@ -46,9 +46,12 @@ jobs:
         run: |
           # 主存储已于 2026-10 切到 Cloudreve（zhipin 退役），remote 同步更正
           $remoteBase  = "cloudreve:/File/System/Nightly"
-          $keepDays    = [int]"${{ inputs.keep_days }}"
-          $keepRecent  = [int]"${{ inputs.keep_recent }}"
-          $dryRun      = "${{ inputs.dry_run }}" -eq "true"
+          $keepDays    = [int]"${{ inputs.keep_days || '30' }}"
+          $keepRecent  = [int]"${{ inputs.keep_recent || '3' }}"
+          # 显式区分触发源，不依赖 schedule 下 inputs 为空串的隐式语义：
+          # 定时=真删（正常运维），手动=默认空跑（防误操作，需显式传 dry_run=false）
+          if ("${{ github.event_name }}" -eq "schedule") { $dryRun = $false }
+          else { $dryRun = ("${{ inputs.dry_run }}" -ne "false") }
           $today       = Get-Date
 
           if ($dryRun) {
@@ -82,7 +85,10 @@ jobs:
                 # 指针里的开机测试视频（boot-test 上传）也受保护
                 $videoPath = $jsonObj.sys.video
                 if ($videoPath) {
-                  $protectedEntries["$dateDir/$([IO.Path]::GetFileName(([Uri]$videoPath).AbsolutePath))"] = $jsonName
+                  # 不能用 [Uri] 取文件名：它会把中文 percent-encode，导致保护键与盘上
+                  # 真实中文文件名对不上（保护会失效）。直接按 / 切最后一段。
+                  $videoName = ($videoPath -split '/')[-1]
+                  if ($videoName) { $protectedEntries["$dateDir/$videoName"] = $jsonName }
                 }
                 if ($jsonObj.sys.date) { $protectedDates.Add($jsonObj.sys.date) | Out-Null }
                 Write-Host "  [$jsonName] → $key" -ForegroundColor Gray

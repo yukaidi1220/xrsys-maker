@@ -33,7 +33,7 @@ jobs:
           # jq 缺失则尝试安装；安装失败也绝不中断（后续解析会安全降级为 ERR）
           command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq >/dev/null 2>&1 || echo "  [警告] jq 安装失败，将尝试继续"
           BASE="https://res.yukaidi.top/d/gslb/mupan/System_MSUpdate"
-          TARGETS="11/26H1 11/25H2 11/24H2 11/23H2 11/21H2 10/22H2 11/LTSC2024 10/LTSC2021 10/LTSB2016"
+          TARGETS="11/26H1 11/25H2 11/24H2 11/23H2 11/21H2 10/22H2 11/LTSC2024 10/LTSC2021 10/LTSC2019"
           SIG=""
           for t in $TARGETS; do
             tmpf=$(mktemp); codef=$(mktemp)
@@ -125,3 +125,28 @@ jobs:
           Import-Module "$PWD\gsudo\x64\gsudoModule.psm1"
 
           gsudo --ti .\makexrsys.ps1 -Target "${{ matrix.target }}"${{ matrix.fulldrv == true && ' -FullDrv' || '' }} -Latest
+
+  # 构建完成后自动跑开机测试（验证镜像真能开机 + 产出测试视频供 EEEOS-GET 展示）。
+  # 等所有构建 job 结束（含失败的），只测 26H1 精简版：它是指针 sys.video 的默认目标，
+  # 且单个 job 就能代表"本批镜像可用性"；其余版本可按需手动 dispatch。
+  boot-test:
+    needs: build
+    if: always() && needs.build.result != 'cancelled'
+    runs-on: windows-latest
+    timeout-minutes: 300
+    steps:
+      - name: 触发开机测试（取当日最新指针）
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RCLONE_TOKEN }}
+        run: |
+          # 用当日最新指针（use_latest=true）：被测对象是本批刚构建出的镜像
+          gh workflow run image-boot-test.yml `
+            -R ${{ github.repository }} `
+            --ref main `
+            -f use_latest=true `
+            -f esd_ver=EEEOS_Win11_26H1_Pro_x64_CN_Full_Net `
+            -f boot_rounds=8 `
+            -f run_minutes=100
+          if ($LASTEXITCODE -ne 0) { "::warning::开机测试触发失败（exit $LASTEXITCODE），可手动补跑" }
+          else { "已触发开机测试（取当日最新 26H1 指针）" }
