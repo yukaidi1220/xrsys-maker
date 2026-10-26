@@ -38,6 +38,16 @@ jobs:
             id
           '
 
+      - name: 隔离测试（绕过 entrypoint 直接起 rclone）
+        run: |
+          set -e
+          echo "── 直接跑 rclone rcd（无 entrypoint，无 openlist）──"
+          docker run --rm --entrypoint /opt/rclone/rclone openlist-rclone:verify             rcd --rc-addr 127.0.0.1:18080 --rc-user p --rc-pass p --log-level INFO             --config /config/rclone/rclone.conf 2>&1 | head -5 &
+          sleep 6
+          echo "── 检查监听 ──"
+          docker ps -q --filter ancestor=openlist-rclone:verify | head -1 | xargs -r -I{} docker exec {} sh -c "netstat -tlnp 2>/dev/null | grep 18080 || echo not-listening" 2>/dev/null || echo skip
+          sleep 1
+
       - name: 容器启动 + 双进程 + 端到端
         run: |
           set -e
