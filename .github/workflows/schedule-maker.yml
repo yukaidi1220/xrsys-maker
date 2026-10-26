@@ -180,3 +180,5 @@ jobs:
           if ($fired -eq 0 -and $skipped -gt 0) { "::warning::今日没有构建出任何镜像（指针日期均非今日），未触发开机测试" }
           # 有失败就必须红：否则 token 权限不足时 16 个全 403 也显示"正常结束"
           if ($failed.Count -gt 0) { Write-Error "以下 $($failed.Count) 个版本触发失败（多为 token 缺 actions:write），可手动补跑：$($failed -join ', ')" }
+
+# 2026-10-27: 触碰文件强制 GitHub 重新索引 schedule（元数据 updated 停在 09-23）
