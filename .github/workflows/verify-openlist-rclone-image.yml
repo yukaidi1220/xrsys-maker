@@ -67,8 +67,13 @@ jobs:
           docker exec verify sh -c "ps aux | grep -c '[r]unsvdir'" || true
           docker exec verify sh -c "ps aux | grep '[r]clone rcd' | wc -l" || true
           docker exec verify sh -c "ls /opt/service/stop/ /opt/service/start/ 2>/dev/null" || true
-          echo "── 5572 监听者 ──"
-          docker exec verify sh -c "netstat -tlnp 2>/dev/null | grep 5572 || ss -tlnp 2>/dev/null | grep 5572 || echo none" || true
+          echo "── 全部监听端口 ──"
+          docker exec verify sh -c "netstat -tlnp 2>/dev/null || ss -tlnp 2>/dev/null || echo no-netstat" || true
+          echo "── rclone 服务状态 ──"
+          docker exec verify sh -c "ls -la /opt/service/start/rclone/" || true
+          docker exec verify sh -c "sv status /opt/service/start/rclone 2>/dev/null || echo no-sv" || true
+          echo "── 手动跑 run 脚本看报错 ──"
+          docker exec verify sh -c "/opt/service/stop/rclone/run 2>&1 | head -5" || true
 
       - name: 清理
         if: always()
