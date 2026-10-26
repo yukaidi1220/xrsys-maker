@@ -43,7 +43,7 @@ jobs:
           set -e
           docker run -d --name verify \
             -e RUN_RCLONE=true -e RUN_ARIA2=false \
-            -e RCLONE_RC_ADDR=127.0.0.1:18080 \
+            -e RCLONE_RC_PORT=18080 \
             -e RCLONE_RC_USER=probe -e RCLONE_RC_PASS=probe123 \
             openlist-rclone:verify
           sleep 1
