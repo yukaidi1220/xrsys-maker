@@ -1005,10 +1005,10 @@ Write-Host "镜像已重命名: $sysFileWithMd5.esd"
         "byte"     = $sysFileByte
         "md5"      = $sysFileMD5
         "sha256"   = $sysFileSHA256
-        "url"      = "$Server/d/cr/qzy-hk/System/Nightly/$sysDate/$sysFileWithMd5.esd"
+        "url"      = "$Server/d/gslb/zhipin/System/Nightly/$sysDate/$sysFileWithMd5.esd"
         # 开机测试视频：与镜像同基名（含 MD5），仅扩展名不同（.esd / .mp4），一一对应。
         # 不用中文名，避免 URL 编码问题；不用"测试视频"字样。
-        "video"    = "$Server/d/cr/qzy-hk/System/Nightly/$sysDate/$sysFileWithMd5.mp4"
+        "video"    = "$Server/d/gslb/zhipin/System/Nightly/$sysDate/$sysFileWithMd5.mp4"
     }
     "os"  = @{
         "arch"    = $osArch
