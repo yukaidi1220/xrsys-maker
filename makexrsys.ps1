@@ -26,13 +26,11 @@ $Driver_URL = "$Server/d/gslb/mupan"
 $Tools_URL = "$Server/d/gslb/mupan/Tools_XR"
 $Software_URL = "$Server/d/gslb/mupan"
 $OSC_URL = "https://github.com/yukaidi1220/xrsys-osc/releases/latest/download/osc.exe"
-$rclone_build_point = "zhipin:/File/System"
-# 影子上传目标（Cloudreve 迁移 Phase 1）：目录布局与 zhipin 完全一致，影子期
-# 不承载发布（latest 指针与 JSON 里的 url 仍指向 zhipin）。影子写失败只告警，
-# 不阻塞发布。影子稳定一周后切指针退役 zhipin，见 cloudreve迁移-方案.md。
-# 注意：需 fork rclone（自带 cloudreve 后端，本脚本 645 行下载的即 fork 版），
-# 且 rclone.conf 里有 [cloudreve] 段（rclone-action 私有仓已加）。
-$rclone_shadow_point = "cloudreve:/File/System"
+$rclone_build_point = "cloudreve:/File/System"
+# 主存储已切 Cloudreve（2026-10-26，迁移 Phase 2）。路径对照（别混）：
+#   rclone 侧（fork cloudreve 远端根=网盘根）：cloudreve:/File/System/...（带 File/）
+#   OpenList 侧（/cr/qzy-hk 挂载根=File 文件夹）：/d/cr/qzy-hk/System/...（不带 File/）
+# zhipin 已死（drive-health 实测 API 挂起无响应），不再写入。
 
 # wimlib 日志限速输出函数
 function Invoke-Wimlib {
@@ -987,7 +985,7 @@ $stream.Close(); $md5.Dispose(); $sha256.Dispose()
         "byte"     = $sysFileByte
         "md5"      = $sysFileMD5
         "sha256"   = $sysFileSHA256
-        "url"      = "$Server/d/gslb/zhipin/System/Nightly/$sysDate/$sysFile.esd"
+        "url"      = "$Server/d/cr/qzy-hk/System/Nightly/$sysDate/$sysFile.esd"
     }
     "os"  = @{
         "arch"    = $osArch
@@ -1002,24 +1000,12 @@ Write-Status -Step "生成文件校验和" -Status "完成"
 
 # Publish image
 Write-Status -Step "上传镜像到网盘" -Status "开始"
-.\bin\rclone.exe copy "$sysFile.esd" "$rclone_build_point/Nightly/$sysDate" --progress --onedrive-chunk-size 250M
+.\bin\rclone.exe copy "$sysFile.esd" "$rclone_build_point/Nightly/$sysDate" --progress
 if ($?) { Write-Host "上传成功！" } else { Write-Error "上传失败！" }
 .\bin\rclone.exe copy "$sysFile.json" "$rclone_build_point/Nightly/$sysDate" --progress
-# 影子写（Cloudreve 迁移 Phase 1）：非致命。本脚本 $ErrorActionPreference=Stop，
-# 所以影子段全部用显式 $LASTEXITCODE 判定 + Write-Warning，绝不触发终止
-foreach ($shadowFile in @("$sysFile.esd", "$sysFile.json")) {
-    .\bin\rclone.exe copy "$shadowFile" "$rclone_shadow_point/Nightly/$sysDate" --progress
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "影子写入成功: $shadowFile"
-    } else {
-        Write-Warning "影子上传失败（exit $LASTEXITCODE），不阻塞发布: $shadowFile"
-    }
-}
 # Set latest
 if ($Latest) {
     .\bin\rclone.exe copyto "$sysFile.json" "$rclone_build_point/Nightly/$sysVer.json" --progress
-    .\bin\rclone.exe copyto "$sysFile.json" "$rclone_shadow_point/Nightly/$sysVer.json" --progress
-    if ($LASTEXITCODE -ne 0) { Write-Warning "影子 latest 指针写入失败，不阻塞发布" }
 }
 Write-Status -Step "上传镜像到网盘" -Status "完成"
 Write-Status -Step "全部完成" -Status "成功"
