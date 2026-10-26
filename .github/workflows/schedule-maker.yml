@@ -1,6 +1,6 @@
 name: 自动批量制作鹅鹅鹅系统
 
-# [已临时禁用] 仅保留手动触发；恢复定时只需取消下方 schedule 注释
+# 定时已启用（2026-10-26 恢复）：每日北京时间 00:00 检测原版更新
 on:
   workflow_dispatch:
     inputs:
@@ -9,9 +9,9 @@ on:
         required: false
         default: false
         type: boolean
-  # schedule:
-  #   # 每日北京时间 00:00（UTC 16:00）检测原版更新
-  #   - cron: "0 16 * * *"
+  schedule:
+    # 每日北京时间 00:00（UTC 16:00）检测原版更新
+    - cron: "0 16 * * *"
 
 permissions:
   contents: write
