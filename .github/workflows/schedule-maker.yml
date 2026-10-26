@@ -127,26 +127,49 @@ jobs:
           gsudo --ti .\makexrsys.ps1 -Target "${{ matrix.target }}"${{ matrix.fulldrv == true && ' -FullDrv' || '' }} -Latest
 
   # 构建完成后自动跑开机测试（验证镜像真能开机 + 产出测试视频供 EEEOS-GET 展示）。
-  # 等所有构建 job 结束（含失败的），只测 26H1 精简版：它是指针 sys.video 的默认目标，
-  # 且单个 job 就能代表"本批镜像可用性"；其余版本可按需手动 dispatch。
+  # 扫描全部 latest 指针，挑出「构建日期 = 今天（北京时间）」的所有版本，逐个触发测试——
+  # 即当日构建出的每一个镜像都会被开机验证，每个版本各自产出测试视频。
   boot-test:
     needs: build
     if: always() && needs.build.result != 'cancelled'
     runs-on: windows-latest
-    timeout-minutes: 300
+    timeout-minutes: 60
     steps:
-      - name: 触发开机测试（取当日最新指针）
+      - name: 扫描当日构建并逐个触发开机测试
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.RCLONE_TOKEN }}
         run: |
-          # 用当日最新指针（use_latest=true）：被测对象是本批刚构建出的镜像
-          gh workflow run image-boot-test.yml `
-            -R ${{ github.repository }} `
-            --ref main `
-            -f use_latest=true `
-            -f esd_ver=EEEOS_Win11_26H1_Pro_x64_CN_Full_Net `
-            -f boot_rounds=8 `
-            -f run_minutes=100
-          if ($LASTEXITCODE -ne 0) { "::warning::开机测试触发失败（exit $LASTEXITCODE），可手动补跑" }
-          else { "已触发开机测试（取当日最新 26H1 指针）" }
+          tzutil /s "China Standard Time" 2>$null
+          $today = (Get-Date).ToString('yyyy.MM.dd')
+          "今日（北京）: $today"
+          $base = "https://res.yukaidi.top/d/cr/qzy-hk/System/Nightly"
+          # 全部 latest 指针（8 版本 × 精简/完整驱动 = 16 个）
+          $pointers = @(
+            'EEEOS_Win11_26H1_Pro_x64_CN_Full_Net',   'EEEOS_Win11_26H1_Pro_x64_CN_Full_DrvCeo',
+            'EEEOS_Win11_25H2_Pro_x64_CN_Full_Net',   'EEEOS_Win11_25H2_Pro_x64_CN_Full_DrvCeo',
+            'EEEOS_Win11_24H2_Pro_x64_CN_Full_Net',   'EEEOS_Win11_24H2_Pro_x64_CN_Full_DrvCeo',
+            'EEEOS_Win11_23H2_Pro_x64_CN_Full_Net',   'EEEOS_Win11_23H2_Pro_x64_CN_Full_DrvCeo',
+            'EEEOS_Win11_LTSC2024_EntS_x64_CN_Full_Net', 'EEEOS_Win11_LTSC2024_EntS_x64_CN_Full_DrvCeo',
+            'EEEOS_Win10_22H2_Pro_x64_CN_Full_Net',   'EEEOS_Win10_22H2_Pro_x64_CN_Full_DrvCeo',
+            'EEEOS_Win10_LTSC2021_EntS_x64_CN_Full_Net', 'EEEOS_Win10_LTSC2021_EntS_x64_CN_Full_DrvCeo',
+            'EEEOS_Win10_LTSC2019_EntS_x64_CN_Full_Net', 'EEEOS_Win10_LTSC2019_EntS_x64_CN_Full_DrvCeo'
+          )
+          $fired = 0; $skipped = 0; $failed = @()
+          foreach ($p in $pointers) {
+            try {
+              $obj = Invoke-RestMethod -Uri "$base/$p.json" -TimeoutSec 30
+              $date = "$($obj.sys.date)"
+              if ($date -ne $today) { "  [跳过] $p（构建日期 $date ≠ 今日）"; $skipped++; continue }
+              $url = $obj.sys.url
+              if (-not $url) { "  [跳过] $p（指针无 url）"; $skipped++; continue }
+              "  [触发] $p  ← $date"
+              gh workflow run image-boot-test.yml -R ${{ github.repository }} --ref main `
+                -f use_latest=false -f esd_url=$url -f boot_rounds=8 -f run_minutes=100
+              if ($LASTEXITCODE -ne 0) { "::warning::$p 触发失败（exit $LASTEXITCODE）"; $failed += $p }
+              else { $fired++; Start-Sleep -Seconds 3 }   # 错开，避免瞬时并发打满配额
+            } catch { "  [跳过] $p（指针读取失败：$($_.Exception.Message)）"; $skipped++ }
+          }
+          "── 汇总：触发 $fired 个，跳过 $skipped 个，失败 $($failed.Count) 个 ──"
+          if ($fired -eq 0) { "::warning::今日没有构建出任何镜像（或指针未更新），未触发开机测试" }
+          if ($failed.Count -gt 0) { "::warning::以下版本触发失败，可手动补跑：$($failed -join ', ')" }
