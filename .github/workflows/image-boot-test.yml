@@ -337,7 +337,10 @@ jobs:
           # 整串传参并内嵌引号：路径含空格（C:\Program Files）时数组参数会被拆散
           $diskFile = if ("$env:IN_DISK" -eq "qcow2") { "disk.qcow2" } else { "disk.vhdx" }
           $diskFmt = if ("$env:IN_DISK" -eq "qcow2") { "qcow2" } else { "vhdx" }
-          $argString = "-machine $env:IN_MACHINE -accel $env:IN_ACCEL -m $env:IN_MEM_GB -smp $env:IN_SMP " +
+          # 注意 -m 的值必须带 G 后缀：QEMU 的 -m 无单位时按 MB 解释（-m 6 = 6MB，
+          # 客户机连显卡都初始化不了，画面停在 "Guest has not initialized the display (yet)."）
+          # 反引号转义 G，避免 PowerShell 把 $env:IN_MEM_GBG 当成变量名
+          $argString = "-machine $env:IN_MACHINE -accel $env:IN_ACCEL -m $env:IN_MEM_GB`G -smp $env:IN_SMP " +
             "-drive `"file=$diskFile,format=$diskFmt,if=none,id=hd0`" "
           if ("$env:IN_MACHINE" -eq "q35") {
             $argString += "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 "
