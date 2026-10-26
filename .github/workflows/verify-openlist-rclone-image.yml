@@ -43,7 +43,7 @@ jobs:
           set -e
           docker run -d --name verify \
             -e RUN_RCLONE=true -e RUN_ARIA2=false \
-            -e RCLONE_RC_ADDR=127.0.0.1:5572 \
+            -e RCLONE_RC_ADDR=127.0.0.1:5573 \
             -e RCLONE_RC_USER=probe -e RCLONE_RC_PASS=probe123 \
             openlist-rclone:verify
           sleep 12
@@ -59,7 +59,7 @@ jobs:
           docker exec verify wget -qO- http://127.0.0.1:5244/ping && echo
           echo "── rcd about（无凭据应报配置错而非连接错）──"
           docker exec verify /opt/rclone/rclone rc \
-            --url http://127.0.0.1:5572 --rc-user probe --rc-pass probe123 \
+            --url http://127.0.0.1:5573 --rc-user probe --rc-pass probe123 \
             operations/about fs=cloudreve: 2>&1 | head -c 300 || true
           echo "── runsv 服务目录 ──"
           docker exec verify ls /opt/service/start/ || true
@@ -73,7 +73,7 @@ jobs:
           docker exec verify sh -c "ls -la /opt/service/start/rclone/" || true
           docker exec verify sh -c "sv status /opt/service/start/rclone 2>/dev/null || echo no-sv" || true
           echo "── 手动跑 run 脚本看报错 ──"
-          docker exec verify sh -c "/opt/service/stop/rclone/run 2>&1 | head -5" || true
+          docker exec verify sh -c "RCLONE_RC_ADDR=127.0.0.1:5573 /opt/service/stop/rclone/run 2>&1 | head -3" || true
 
       - name: 清理
         if: always()
