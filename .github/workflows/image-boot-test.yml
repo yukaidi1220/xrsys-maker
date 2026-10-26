@@ -52,9 +52,9 @@ on:
         required: false
         default: "8"
       attempts:
-        description: "并行尝试次数（GH runner 池存在对 WHPX 客户机不友好的宿主机，2=失败自动换机重试）"
+        description: "并行尝试次数（1=单份，默认；宿主机抽风已用 QMP 重试+按轮重拉兜底）"
         required: false
-        default: "2"
+        default: "1"
       machine:
         description: "机器型号（q35=现代PCIe+AHCI；pc=i440fx 老式IDE，模拟最成熟）"
         required: false
