@@ -67,6 +67,8 @@ jobs:
           docker exec verify sh -c "ps aux | grep -c '[r]unsvdir'" || true
           docker exec verify sh -c "ps aux | grep '[r]clone rcd' | wc -l" || true
           docker exec verify sh -c "ls /opt/service/stop/ /opt/service/start/ 2>/dev/null" || true
+          echo "── rclone 进程数与命令行 ──"
+          docker exec verify sh -c "ps -ef | grep '[r]clone' || echo no-rclone-proc" || true
           echo "── 全部监听端口 ──"
           docker exec verify sh -c "netstat -tlnp 2>/dev/null || ss -tlnp 2>/dev/null || echo no-netstat" || true
           echo "── rclone 服务状态 ──"
