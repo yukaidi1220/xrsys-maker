@@ -56,7 +56,11 @@ jobs:
             -e RCLONE_RC_ADDR=127.0.0.1:18080 \
             -e RCLONE_RC_USER=probe -e RCLONE_RC_PASS=probe123 \
             openlist-rclone:verify
-          sleep 12
+          sleep 1
+          echo "── 启动 1 秒时的端口与进程（rcd 首次绑定之前）──"
+          docker exec verify sh -c "cat /proc/net/tcp | awk 'NR>1 {print \$2}' | grep -i ':46A0' || echo 18080-free" || true
+          docker exec verify sh -c "ps -ef | head -10" || true
+          sleep 11
           echo "── 容器状态 ──"
           docker ps -a --filter name=verify --format '{{.Status}}'
           echo "── 容器日志（死因）──"
