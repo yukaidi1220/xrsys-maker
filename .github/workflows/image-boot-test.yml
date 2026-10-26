@@ -139,7 +139,9 @@ jobs:
             } catch { Write-Error "取最新指针失败（$ptr）：$($_.Exception.Message)" }
           }
           if (-not $url) { Write-Error "未取得 ESD 链接（use_latest=$useLatest 且 esd_url 为空）" }
+          $esdFileName = [IO.Path]::GetFileName(([Uri]$url).AbsolutePath)
           "esd_url=$url" >> $env:GITHUB_OUTPUT
+          "esd_name=$esdFileName" >> $env:GITHUB_OUTPUT
           "esd_date=$(if ($date) { $date } else { 'unknown' })" >> $env:GITHUB_OUTPUT
 
       - name: 下载 ESD
@@ -512,6 +514,7 @@ jobs:
           if ($p -and -not $p.HasExited) { Wait-Process -Id $p.Id -Timeout 90 -ErrorAction SilentlyContinue }
 
       - name: 绿局转视频（H.265，5fps，去重帧）
+        id: video
         if: success()
         shell: pwsh
         run: |
@@ -547,14 +550,42 @@ jobs:
           "入选 $used 帧，丢弃非 1280x800 帧 $skipped 张"
           if ($used -eq 0) { "::warning::没有 1280x800 帧，跳过视频生成"; exit 0 }
           if ($lastName) { Add-Content $listFile "file '$lastName'" }
+          # 视频名带镜像文件名：EEEOS_xxx_2026.07.22_28000.2525_测试视频.mp4
+          $esdName = [IO.Path]::GetFileNameWithoutExtension("${{ steps.resolve.outputs.esd_name }}")
+          if (-not $esdName) { $esdName = "unknown" }
+          $videoName = "${esdName}_测试视频.mp4"
           $sw = [System.Diagnostics.Stopwatch]::StartNew()
           ffmpeg -y -hide_banner -loglevel error -f concat -safe 0 -i $listFile `
-            -r 5 -c:v libx265 -preset slow -crf 30 -pix_fmt yuv420p -tag:v hvc1 boot-video.mp4
+            -r 5 -c:v libx265 -preset slow -crf 30 -pix_fmt yuv420p -tag:v hvc1 $videoName
           if ($LASTEXITCODE -ne 0) { "::warning::ffmpeg 编码失败（exit $LASTEXITCODE），不影响判定" }
-          elseif (Test-Path boot-video.mp4) {
-            $dur = & ffprobe -v error -show_entries format=duration -of csv=p=0 boot-video.mp4 2>$null
-            "boot-video.mp4 生成：$([math]::Round((Get-Item boot-video.mp4).Length/1MB,2))MB，ffprobe 实测时长 ${dur}s（期望 ~$([math]::Round($used/5,1))s），耗时 $([int]$sw.Elapsed.TotalSeconds)s"
+          elseif (Test-Path $videoName) {
+            $dur = & ffprobe -v error -show_entries format=duration -of csv=p=0 $videoName 2>$null
+            "$videoName 生成：$([math]::Round((Get-Item $videoName).Length/1MB,2))MB，ffprobe 实测时长 ${dur}s（期望 ~$([math]::Round($used/5,1))s），耗时 $([int]$sw.Elapsed.TotalSeconds)s"
+            "video_name=$videoName" >> $env:GITHUB_OUTPUT
           }
+
+      - name: 上传测试视频到网盘（供 EEEOS-GET 前端取用）
+        if: success()
+        shell: pwsh
+        run: |
+          # 视频随镜像一起发布：与 ESD 同目录（Nightly/<构建日期>/），并在指针 JSON 里
+          # 加 video 字段，EEEOS-GET 构建时可直接读到测试视频链接
+          $esdUrl = "${{ steps.resolve.outputs.esd_url }}"
+          if (-not $esdUrl) { "::warning::无 ESD 地址，跳过视频上传"; exit 0 }
+          $videoName = "${{ steps.video.outputs.video_name }}"
+          if (-not $videoName -or -not (Test-Path $videoName)) { "::warning::无视频文件，跳过上传"; exit 0 }
+          if (-not (Test-Path .\bin\rclone.exe)) {
+            Invoke-WebRequest -Uri "https://github.com/yukaidi1220/rclone/releases/latest/download/rclone-cdn-windows-amd64.exe" -OutFile .\bin\rclone.exe
+          }
+          $conf = Join-Path $env:RUNNER_TEMP "rclone.conf"
+          "${{ secrets.RCLONE_TOKEN }}" | Out-File $conf -Encoding utf8
+          # ESD 形如 .../Nightly/2026.07.22/xxx.esd → 视频传到同目录
+          $esdPath = ([Uri]$esdUrl).AbsolutePath
+          $dir = ($esdPath -replace '^/d/', '/').Substring(0, $esdPath.LastIndexOf('/'))
+          "上传 $videoName → cloudreve:${dir}/"
+          & .\bin\rclone.exe copy $videoName "cloudreve:$dir/" --config $conf --progress
+          if ($LASTEXITCODE -ne 0) { "::warning::视频上传失败（exit $LASTEXITCODE）" }
+          else { "视频已上传：${{ inputs.esd_ver }}/$dir/$videoName" }
 
       - name: 赛后取证（minidump / Panther / 事件日志）
         if: always()
@@ -674,20 +705,20 @@ jobs:
             try { Dismount-DiskImage -ImagePath "$PWD\$vfile" -ErrorAction Stop | Out-Null } catch {}
           }
 
-      - name: 打包上传（视频，单独 artifact，名带 run id）
+      - name: 打包上传（视频，单独 artifact，名带镜像名+run id）
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          # 后续计划在名字里再加镜像文件名（esd 名）
-          name: boot-video-${{ github.run_id }}
-          path: boot-video.mp4
+          name: ${{ steps.resolve.outputs.esd_name }}_测试视频_${{ github.run_id }}
+          path: ${{ steps.video.outputs.video_name }}
           retention-days: 7
+          if-no-files-found: warn
 
-      - name: 打包上传（截图/日志/取证，名带 run id）
+      - name: 打包上传（截图/日志/取证，名带镜像名+run id）
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: boot-shots-${{ inputs.image_index }}-a${{ matrix.attempt }}-${{ github.run_id }}
+          name: ${{ steps.resolve.outputs.esd_name }}_shots_${{ github.run_id }}
           path: |
             shots/
             qemu-stderr-*.log
