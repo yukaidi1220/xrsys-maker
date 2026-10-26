@@ -62,7 +62,13 @@ jobs:
             --url http://127.0.0.1:5572 --rc-user probe --rc-pass probe123 \
             operations/about fs=cloudreve: 2>&1 | head -c 300 || true
           echo "── runsv 服务目录 ──"
-          docker exec verify ls /opt/service/start/
+          docker exec verify ls /opt/service/start/ || true
+          echo "── runsv 进程与 rcd 实例数（诊断双启动）──"
+          docker exec verify sh -c "ps aux | grep -c '[r]unsvdir'" || true
+          docker exec verify sh -c "ps aux | grep '[r]clone rcd' | wc -l" || true
+          docker exec verify sh -c "ls /opt/service/stop/ /opt/service/start/ 2>/dev/null" || true
+          echo "── 5572 监听者 ──"
+          docker exec verify sh -c "netstat -tlnp 2>/dev/null | grep 5572 || ss -tlnp 2>/dev/null | grep 5572 || echo none" || true
 
       - name: 清理
         if: always()
