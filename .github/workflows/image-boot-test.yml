@@ -81,15 +81,34 @@ on:
 
 jobs:
   boot-test:
-    runs-on: ${{ inputs.runner || 'windows-latest' }}
+    runs-on: windows-latest
     timeout-minutes: 300
+    # 关键：schedule 触发时 inputs.* 全为空（默认值只对 workflow_dispatch 生效），
+    # 会生成 `-machine ` 空参数、AddMinutes() 空参抛错——nightly 从来没跑通的真因。
+    # 统一在 job 级 env 兜底，脚本里改用 $env:*，两种触发方式行为一致。
+    env:
+      IN_USE_LATEST: ${{ inputs.use_latest || 'true' }}
+      IN_ESD_URL: $env:IN_ESD_URL
+      IN_ESD_VER: ${{ inputs.esd_ver || 'EEEOS_Win11_26H1_Pro_x64_CN_Full_Net' }}
+      IN_IMAGE_INDEX: ${{ inputs.image_index || '4' }}
+      IN_MEM_GB: ${{ inputs.mem_gb || '6' }}
+      IN_RUN_MINUTES: ${{ inputs.run_minutes || '100' }}
+      IN_ACCEL: ${{ inputs.accel || 'whpx' }}
+      IN_CPU_MODEL: ${{ inputs.cpu_model || 'Skylake-Client' }}
+      IN_SMP: $env:IN_SMP
+      IN_MACHINE: ${{ inputs.machine || 'q35' }}
+      IN_DISK: ${{ inputs.disk || 'qcow2' }}
+      IN_NIC: ${{ inputs.nic || 'e1000' }}
+      IN_BOOT_ROUNDS: ${{ inputs.boot_rounds || '8' }}
+      IN_ATTEMPTS: ${{ inputs.attempts || '1' }}
+      IN_BCD_BOOT: ${{ inputs.bcdboot || 'host' }}
+      IN_ESP_NATIVE: ${{ inputs.esp_native || 'false' }}
     strategy:
       fail-fast: false
       matrix:
-        # runner 池有对 WHPX 不友好的宿主机（实测 13:00 起连续 4 局同死法）：
-        # 双 attempt 并行、各拿不同宿主机；前面的 attempt 失败不算数，最后一个定胜负
-        attempt: ${{ (inputs.attempts || '2') == '1' && fromJSON('["1"]') || fromJSON('["1","2"]') }}
-    continue-on-error: ${{ matrix.attempt != (inputs.attempts || '2') }}
+        # 双 attempt（默认已撤为 1）：矩阵里按 IN_ATTEMPTS 展开
+        attempt: ${{ (inputs.attempts || '1') == '1' && fromJSON('["1"]') || fromJSON('["1","2"]') }}
+    continue-on-error: ${{ matrix.attempt != (inputs.attempts || '1') }}
     steps:
 
       - name: 安装 QEMU 与 wimlib
@@ -117,10 +136,10 @@ jobs:
           tzutil /s "China Standard Time" 2>$null
           $cstNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date).ToUniversalTime(), 'China Standard Time')
           "北京时间: $($cstNow.ToString('yyyy-MM-dd HH:mm:ss'))"
-          $useLatest = "${{ inputs.use_latest }}"
-          $url = "${{ inputs.esd_url }}"
+          $useLatest = $env:IN_USE_LATEST
+          $url = "$env:IN_ESD_URL"
           if ($useLatest -eq "true") {
-            $ver = "${{ inputs.esd_ver }}"
+            $ver = "$env:IN_ESD_VER"
             $base = "https://res.yukaidi.top/d/cr/qzy-hk/System/Nightly"
             # 指针文件（nightly 构建的 latest）→ 里面的 sys.url 就是当日 ESD 直链
             $ptr = "$base/$ver.json"
@@ -203,7 +222,7 @@ jobs:
           foreach ($l in $infoLines) { if ($l -match '^Image Count:\s*(\d+)') { $imageCount = [int]$Matches[1] } }
           "映像数: $imageCount"
           foreach ($l in $infoLines) { if ($l -match '^Name:') { "  $($l.Trim())" } }
-          $idx = [int]"${{ inputs.image_index }}"
+          $idx = [int]"$env:IN_IMAGE_INDEX"
           if ($idx -gt $imageCount) {
             if ($imageCount -eq 1) {
               "::warning::指定的索引 $idx 超出范围（该 ESD 仅 1 个映像），自动回退索引 1"
@@ -234,7 +253,7 @@ jobs:
           # 不影响引导，bootx64 回退路径一直正常）。此块仅探测留痕。
           $exDst = "V:\Windows\boot\EFI_EX\bootmgfw_EX.efi"
           if (Test-Path $exDst) { "补位跳过（$exDst 已存在，60 次重试为 bcdboot 固有噪音）" } else { "::warning::$exDst 不存在（罕见）" }
-          if ("${{ inputs.bcdboot }}" -eq "image") {
+          if ("$env:IN_BCD_BOOT" -eq "image") {
             # 镜像自带 bcdboot：保证引导文件与镜像同源（宿主版本会混入宿主 EFI 文件）
             $bcd = "V:\Windows\System32\bcdboot.exe"
             if (-not (Test-Path $bcd)) { Write-Error "镜像内无 bcdboot.exe" }
@@ -245,7 +264,7 @@ jobs:
           "使用: $bcd"
           & $bcd V:\Windows /s Y: /f UEFI /v
           if ($LASTEXITCODE -ne 0) { Write-Error "bcdboot 失败（exit $LASTEXITCODE）" }
-          if ("${{ inputs.esp_native }}" -eq "true") {
+          if ("$env:IN_ESP_NATIVE" -eq "true") {
             # 宿主 bcdboot 会把宿主版引导文件缝进 ESP；用镜像原生 EX 版覆盖，引导链全程镜像同源
             foreach ($map in @(
               @("V:\Windows\boot\EFI_EX\bootmgfw_EX.efi", "Y:\EFI\Microsoft\Boot\bootmgfw.efi"),
@@ -299,7 +318,7 @@ jobs:
           "@ | diskpart.exe | Out-Null
           "VHDX 已卸载，交给 QEMU"
           # qcow2 模式：建盘/释放走 Windows 原生工具，开 QEMU 前转成 QEMU 原生格式
-          if ("${{ inputs.disk }}" -eq "qcow2") {
+          if ("$env:IN_DISK" -eq "qcow2") {
             $qemuImg = Join-Path (Split-Path (Get-Command qemu-system-x86_64.exe).Source) "qemu-img.exe"
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
             & $qemuImg convert -f vhdx -O qcow2 -p disk.vhdx disk.qcow2
@@ -317,11 +336,11 @@ jobs:
           "固件: $edk2"
           New-Item -ItemType Directory shots | Out-Null
           # 整串传参并内嵌引号：路径含空格（C:\Program Files）时数组参数会被拆散
-          $diskFile = if ("${{ inputs.disk }}" -eq "qcow2") { "disk.qcow2" } else { "disk.vhdx" }
-          $diskFmt = if ("${{ inputs.disk }}" -eq "qcow2") { "qcow2" } else { "vhdx" }
-          $argString = "-machine ${{ inputs.machine }} -accel ${{ inputs.accel }} -m ${{ inputs.mem_gb }}G -smp ${{ inputs.smp || '4' }} " +
+          $diskFile = if ("$env:IN_DISK" -eq "qcow2") { "disk.qcow2" } else { "disk.vhdx" }
+          $diskFmt = if ("$env:IN_DISK" -eq "qcow2") { "qcow2" } else { "vhdx" }
+          $argString = "-machine $env:IN_MACHINE -accel $env:IN_ACCEL -m $env:IN_MEM_GBG -smp $env:IN_SMP " +
             "-drive `"file=$diskFile,format=$diskFmt,if=none,id=hd0`" "
-          if ("${{ inputs.machine }}" -eq "q35") {
+          if ("$env:IN_MACHINE" -eq "q35") {
             $argString += "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 "
           } else {
             # i440fx(pc)：PIIX 老 IDE，Windows 自带驱动、QEMU 模拟最成熟
@@ -330,25 +349,30 @@ jobs:
           $argString +=
             "-drive `"if=pflash,format=raw,readonly=on,file=$edk2`" " +
             "-display none -qmp tcp:127.0.0.1:4444,server,nowait"
-          if ("${{ inputs.nic }}" -ne "none") {
-            $argString += " -netdev user,id=n0 -device ${{ inputs.nic }},netdev=n0"
+          if ("$env:IN_NIC" -ne "none") {
+            $argString += " -netdev user,id=n0 -device $env:IN_NIC,netdev=n0"
           }
-          $cpuModel = "${{ inputs.cpu_model }}".Trim()
+          $cpuModel = "$env:IN_CPU_MODEL".Trim()
           if ($cpuModel) { $argString += " -cpu $cpuModel" }
           "QEMU 参数: $argString"
           # 客户机部署流程收尾会自动重启（TCG 长跑实测）。WHPX 后端恰好在客户机
           # 重置路径上崩（xsave / VP exit 4，实测崩溃时点=桌面阶段结束转黑瞬间），
           # 所以加 -no-reboot：客户机一重启 QEMU 就干净退出，外层重新拉起二_boot。
           $argString += " -no-reboot"
-          $limit = (Get-Date).AddMinutes(${{ inputs.run_minutes }})
+          $limit = (Get-Date).AddMinutes($env:IN_RUN_MINUTES)
           $t0 = Get-Date
           # 循环检测记账：主画面哈希 → 该画面作为"稳定期"出现的次数
           $periodCounts = @{}
           $periodLen = 0
           $i = 0; $kept = 0; $verdict = "timeout"
           $lastMain = $null; $lastBand = $null; $mainSame = 0; $bandTickInStable = $false
-          $maxRounds = [int]"${{ inputs.boot_rounds || '6' }}"
+          $maxRounds = [int]"$env:IN_BOOT_ROUNDS"
           for ($bootRound = 1; $bootRound -le $maxRounds -and $verdict -eq "timeout"; $bootRound++) {
+            # 每轮重置判定状态：跨重启不重置会让 loop 计数累加（不同轮次的同画面误判 loop）、
+            # 或让 mainSame 从上一轮高位续算（重启瞬间误判 desktop/frozen）
+            $periodCounts = @{}
+            $periodLen = 0
+            $lastMain = $null; $lastBand = $null; $mainSame = 0; $bandTickInStable = $false
             $stderrFile = "qemu-stderr-$bootRound.log"
             $p = Start-Process qemu-system-x86_64.exe -ArgumentList $argString -PassThru -NoNewWindow -RedirectStandardError $stderrFile
             Start-Sleep -Seconds 8
@@ -418,6 +442,9 @@ jobs:
             $rowBytes = $nums[0] * 3
             $stripRows = 56        # 任务栏条高（47px 实测 + 余量）
             $cornerPx = 300        # 右下角时钟区宽
+            # 维度守卫：早期固件/文本模式截图可能远小于此（如 640x480），越界会让
+            # Array.Copy 负偏移抛异常掀翻整个步骤（实测未遇，但必须兜住）
+            if ($nums[0] -lt ($cornerPx + 1) -or $nums[1] -le ($stripRows + 1)) { return $null }
             $mainEnd = $i + ($nums[1] - $stripRows) * $rowBytes
             if ($mainEnd -ge $bytes.Length) { return $null }
             $md5 = [Security.Cryptography.MD5]::Create()
@@ -446,7 +473,9 @@ jobs:
             $shot = "shot-{0:d4}.ppm" -f $i
             $writer.WriteLine('{"execute":"screendump","arguments":{"filename":"' + $shot + '"}}')
             if (Wait-QmpReturn $reader) {
-              $hashes = Get-PpmHashes $shot
+              # 哈希解析任何异常都按"无效截图"跳过，绝不掀翻判定步骤
+              $hashes = $null
+              try { $hashes = Get-PpmHashes $shot } catch { "::warning::截图解析失败（$($_.Exception.Message)），跳过该帧" }
               if ($hashes) {
                 $main, $band = $hashes.Split('|')
                 # 去重保留：主画面变了才进 artifact；每 100 张强留一张做时间轴
@@ -565,7 +594,7 @@ jobs:
           }
 
       - name: 获取 rclone 配置与二进制（私有仓）
-        if: success() && inputs.use_latest
+        if: success() && env.IN_USE_LATEST == 'true'
         uses: actions/checkout@v6
         with:
           repository: yukaidi1220/rclone-action
@@ -574,7 +603,7 @@ jobs:
 
       - name: 上传测试视频到网盘（供 EEEOS-GET 前端取用）
         id: upload_video
-        if: success() && inputs.use_latest
+        if: success() && env.IN_USE_LATEST == 'true'
         shell: pwsh
         run: |
           # 视频随镜像一起发布：与 ESD 同目录（Nightly/<构建日期>/）。
@@ -586,10 +615,11 @@ jobs:
           $conf = "rclone-bin\rclone.conf"
           if (-not (Test-Path $conf)) { "::warning::私有仓无 rclone.conf，跳过视频上传"; exit 0 }
           # ESD 形如 https://res.yukaidi.top/d/cr/qzy-hk/System/Nightly/2026.07.22/x.esd
-          # → cloudreve:/File/System/Nightly/2026.07.22/
+          # → cloudreve:/File/System/Nightly/2026.07.22/（注意 web 路径含 /d/cr/qzy-hk，
+          #   存储路径是 /File/System/...，两者前缀不同，必须按 System/Nightly 段解析）
           $esdPath = ([Uri]$esdUrl).AbsolutePath
-          if ($esdPath -match '/(File/System/Nightly/[^/]+)/') { $remoteDir = $Matches[1] }
-          else { Write-Error "无法从 ESD 路径解析 Nightly 目录: $esdPath" }
+          if ($esdPath -match '/System/Nightly/([^/]+)/') { $remoteDir = "File/System/Nightly/$($Matches[1])" }
+          else { "::warning::无法从 ESD 路径解析 Nightly 日期: $esdPath"; exit 0 }
           "上传 $videoName → cloudreve:/$remoteDir/"
           & rclone-bin\rclone.exe copy $videoName "cloudreve:/$remoteDir/" --config $conf --progress
           if ($LASTEXITCODE -ne 0) { "::warning::视频上传失败（exit $LASTEXITCODE）" }
@@ -608,7 +638,7 @@ jobs:
           # qcow2 模式取证：转回 VHDX 副本再挂载（diskpart 只认 VHDX）。
           # 必须 fixed 预分配子格式——qemu-img 默认产物是稀疏文件，diskpart 拒挂（QEMU#136，实测 M1/M3 三连败）
           $vfile = "disk.vhdx"
-          if ("${{ inputs.disk }}" -eq "qcow2" -and (Test-Path disk.qcow2)) {
+          if ("$env:IN_DISK" -eq "qcow2" -and (Test-Path disk.qcow2)) {
             $qemuImg2 = Join-Path (Split-Path (Get-Command qemu-system-x86_64.exe).Source) "qemu-img.exe"
             $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
             & $qemuImg2 convert -f qcow2 -O vhdx -o subformat=fixed disk.qcow2 forensic.vhdx 2>&1 | Out-Null
@@ -720,7 +750,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.resolve.outputs.esd_name }}_测试视频_${{ github.run_id }}
+          name: ${{ steps.resolve.outputs.esd_name }}_测试视频_a${{ matrix.attempt }}_${{ github.run_id }}
           path: ${{ steps.video.outputs.video_name }}
           retention-days: 7
           if-no-files-found: warn
@@ -729,7 +759,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.resolve.outputs.esd_name }}_shots_${{ github.run_id }}
+          name: ${{ steps.resolve.outputs.esd_name }}_shots_a${{ matrix.attempt }}_${{ github.run_id }}
           path: |
             shots/
             qemu-stderr-*.log
