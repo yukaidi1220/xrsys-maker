@@ -10,8 +10,10 @@ on:
         default: false
         type: boolean
   schedule:
-    # 每日北京时间 00:00（UTC 16:00）检测原版更新
-    - cron: "0 16 * * *"
+    # 每日北京时间 02:00（UTC 18:00）检测原版更新。
+    # 原 00:00（UTC 16:00）实测被 GitHub 调度延迟到 02:00-04:00 甚至丢班
+    # （9 月历史 schedule 触发时间均为 02:18-04:12），故直接错峰到 02:00。
+    - cron: "0 18 * * *"
 
 permissions:
   contents: write
