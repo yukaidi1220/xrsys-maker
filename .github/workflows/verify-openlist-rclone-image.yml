@@ -84,6 +84,8 @@ jobs:
           echo "── rclone 服务状态 ──"
           docker exec verify sh -c "ls -la /opt/service/start/rclone/" || true
           docker exec verify sh -c "sv status /opt/service/start/rclone 2>/dev/null || echo no-sv" || true
+          echo "── rcd.log 内容 ──"
+          docker exec verify cat /var/log/rcd.log 2>/dev/null | head -25 || true
           echo "── 手动跑 run 脚本看报错 ──"
           docker exec verify sh -c "RCLONE_RC_ADDR=127.0.0.1:18080 /opt/service/stop/rclone/run 2>&1 | head -3" || true
 
