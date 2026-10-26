@@ -76,6 +76,12 @@ nightly：`cron 40 17 * * *`（北京 01:40）。撞美国早高峰，GitHub sch
    对策：双 attempt + QMP 重试 + 按轮失败自动重拉。
 6. **配置死刑名单**：qemu64、kernel-irqchip=off、TCG、smp=1、cache=writethrough、
    镜像自带 bcdboot、esp 全宽底条判定。
+7. **`-m` 必须带单位 G**（2026-10-26 踩）：QEMU 的 `-m` 无单位时按 **MB** 解释，
+   `-m 6` = 6MB 内存 → 客户机连显卡都初始化不了，截图永远是
+   `Guest has not initialized the display (yet).`，5 分钟后判 frozen。
+   PowerShell 里写 `-m $env:IN_MEM_GB`G`（反引号转义 G，否则 `$env:IN_MEM_GBG`
+   会被当成变量名）。**排查口诀：看到 "Guest has not initialized the display"
+   先查 QEMU 参数里的内存值和单位。**
 
 ## 六、运维 runbook
 
