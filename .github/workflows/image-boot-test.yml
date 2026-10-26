@@ -491,22 +491,29 @@ jobs:
           }
           $listFile = "shots\concat.txt"
           Remove-Item $listFile -ErrorAction SilentlyContinue
-          $used = 0; $skipped = 0
+          $used = 0; $skipped = 0; $lastName = $null
           foreach ($f in (Get-ChildItem shots\shot-*.ppm | Sort-Object Name)) {
             try {
               $sz = Get-PpmSize $f.FullName
-              if ($sz -and $sz.w -eq 1280 -and $sz.h -eq 800) { Add-Content $listFile "file '$($f.Name)'"; $used++ }
-              else { $skipped++ }
+              if ($sz -and $sz.w -eq 1280 -and $sz.h -eq 800) {
+                # concat demuxer 对图片默认时长为零（375 帧全挤 t=0，实测"闪一下就没了"）：
+                # 每帧显式 duration 0.2s；末帧再列一次，否则其 duration 不生效（demuxer 已知怪癖）
+                Add-Content $listFile "file '$($f.Name)'"
+                Add-Content $listFile "duration 0.2"
+                $lastName = $f.Name; $used++
+              } else { $skipped++ }
             } catch { $skipped++ }
           }
           "入选 $used 帧，丢弃非 1280x800 帧 $skipped 张"
           if ($used -eq 0) { "::warning::没有 1280x800 帧，跳过视频生成"; exit 0 }
+          if ($lastName) { Add-Content $listFile "file '$lastName'" }
           $sw = [System.Diagnostics.Stopwatch]::StartNew()
           ffmpeg -y -hide_banner -loglevel error -f concat -safe 0 -i $listFile `
             -r 5 -c:v libx265 -preset slow -crf 30 -pix_fmt yuv420p -tag:v hvc1 boot-video.mp4
           if ($LASTEXITCODE -ne 0) { "::warning::ffmpeg 编码失败（exit $LASTEXITCODE），不影响判定" }
           elseif (Test-Path boot-video.mp4) {
-            "boot-video.mp4 生成：$([math]::Round((Get-Item boot-video.mp4).Length/1MB,2))MB，时长 ~$([math]::Round($used/5,1))s，耗时 $([int]$sw.Elapsed.TotalSeconds)s"
+            $dur = & ffprobe -v error -show_entries format=duration -of csv=p=0 boot-video.mp4 2>$null
+            "boot-video.mp4 生成：$([math]::Round((Get-Item boot-video.mp4).Length/1MB,2))MB，ffprobe 实测时长 ${dur}s（期望 ~$([math]::Round($used/5,1))s），耗时 $([int]$sw.Elapsed.TotalSeconds)s"
           }
 
       - name: 赛后取证（minidump / Panther / 事件日志）
