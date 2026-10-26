@@ -134,11 +134,16 @@ jobs:
     if: always() && needs.build.result != 'cancelled'
     runs-on: windows-latest
     timeout-minutes: 60
+    permissions:
+      actions: write   # gh workflow run 触发 image-boot-test 必需
+      contents: read
     steps:
       - name: 扫描当日构建并逐个触发开机测试
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.RCLONE_TOKEN }}
+          # 优先用内置 GITHUB_TOKEN（配了 permissions.actions:write 即可 dispatch）；
+          # RCLONE_TOKEN 是 rclone 用的 PAT，scope 未必含 actions:write
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tzutil /s "China Standard Time" 2>$null
           $today = (Get-Date).ToString('yyyy.MM.dd')
@@ -171,5 +176,7 @@ jobs:
             } catch { "  [跳过] $p（指针读取失败：$($_.Exception.Message)）"; $skipped++ }
           }
           "── 汇总：触发 $fired 个，跳过 $skipped 个，失败 $($failed.Count) 个 ──"
-          if ($fired -eq 0) { "::warning::今日没有构建出任何镜像（或指针未更新），未触发开机测试" }
-          if ($failed.Count -gt 0) { "::warning::以下版本触发失败，可手动补跑：$($failed -join ', ')" }
+          if ($fired -eq 0 -and $skipped -eq 0) { Write-Error "所有指针都读取失败，触发器异常" }
+          if ($fired -eq 0 -and $skipped -gt 0) { "::warning::今日没有构建出任何镜像（指针日期均非今日），未触发开机测试" }
+          # 有失败就必须红：否则 token 权限不足时 16 个全 403 也显示"正常结束"
+          if ($failed.Count -gt 0) { Write-Error "以下 $($failed.Count) 个版本触发失败（多为 token 缺 actions:write），可手动补跑：$($failed -join ', ')" }

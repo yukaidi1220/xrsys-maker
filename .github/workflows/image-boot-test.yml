@@ -88,19 +88,18 @@ jobs:
     # 统一在 job 级 env 兜底，脚本里改用 $env:*，两种触发方式行为一致。
     env:
       IN_USE_LATEST: ${{ inputs.use_latest || 'true' }}
-      IN_ESD_URL: $env:IN_ESD_URL
+      IN_ESD_URL: ${{ inputs.esd_url }}
       IN_ESD_VER: ${{ inputs.esd_ver || 'EEEOS_Win11_26H1_Pro_x64_CN_Full_Net' }}
       IN_IMAGE_INDEX: ${{ inputs.image_index || '4' }}
       IN_MEM_GB: ${{ inputs.mem_gb || '6' }}
       IN_RUN_MINUTES: ${{ inputs.run_minutes || '100' }}
       IN_ACCEL: ${{ inputs.accel || 'whpx' }}
       IN_CPU_MODEL: ${{ inputs.cpu_model || 'Skylake-Client' }}
-      IN_SMP: $env:IN_SMP
+      IN_SMP: ${{ inputs.smp || '4' }}
       IN_MACHINE: ${{ inputs.machine || 'q35' }}
       IN_DISK: ${{ inputs.disk || 'qcow2' }}
       IN_NIC: ${{ inputs.nic || 'e1000' }}
       IN_BOOT_ROUNDS: ${{ inputs.boot_rounds || '8' }}
-      IN_ATTEMPTS: ${{ inputs.attempts || '1' }}
       IN_BCD_BOOT: ${{ inputs.bcdboot || 'host' }}
       IN_ESP_NATIVE: ${{ inputs.esp_native || 'false' }}
     strategy:
@@ -338,7 +337,7 @@ jobs:
           # 整串传参并内嵌引号：路径含空格（C:\Program Files）时数组参数会被拆散
           $diskFile = if ("$env:IN_DISK" -eq "qcow2") { "disk.qcow2" } else { "disk.vhdx" }
           $diskFmt = if ("$env:IN_DISK" -eq "qcow2") { "qcow2" } else { "vhdx" }
-          $argString = "-machine $env:IN_MACHINE -accel $env:IN_ACCEL -m $env:IN_MEM_GBG -smp $env:IN_SMP " +
+          $argString = "-machine $env:IN_MACHINE -accel $env:IN_ACCEL -m $env:IN_MEM_GB -smp $env:IN_SMP " +
             "-drive `"file=$diskFile,format=$diskFmt,if=none,id=hd0`" "
           if ("$env:IN_MACHINE" -eq "q35") {
             $argString += "-device ahci,id=ahci0 -device ide-hd,drive=hd0,bus=ahci0.0 "
@@ -594,7 +593,7 @@ jobs:
           }
 
       - name: 获取 rclone 配置与二进制（私有仓）
-        if: success() && env.IN_USE_LATEST == 'true'
+        if: success()
         uses: actions/checkout@v6
         with:
           repository: yukaidi1220/rclone-action
@@ -603,7 +602,7 @@ jobs:
 
       - name: 上传测试视频到网盘（供 EEEOS-GET 前端取用）
         id: upload_video
-        if: success() && env.IN_USE_LATEST == 'true'
+        if: success()
         shell: pwsh
         run: |
           # 视频随镜像一起发布：与 ESD 同目录（Nightly/<构建日期>/）。
