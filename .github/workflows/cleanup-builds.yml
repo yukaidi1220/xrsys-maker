@@ -9,7 +9,7 @@ on:
       dry_run:
         description: "试运行模式（仅模拟，不实际删除）"
         required: false
-        default: false
+        default: true
         type: boolean
       keep_days:
         description: "保留天数（默认 30）"
@@ -44,7 +44,8 @@ jobs:
       - name: 执行版本保留清理
         shell: pwsh
         run: |
-          $remoteBase  = "zhipin:/File/System/Nightly"
+          # 主存储已于 2026-10 切到 Cloudreve（zhipin 退役），remote 同步更正
+          $remoteBase  = "cloudreve:/File/System/Nightly"
           $keepDays    = [int]"${{ inputs.keep_days }}"
           $keepRecent  = [int]"${{ inputs.keep_recent }}"
           $dryRun      = "${{ inputs.dry_run }}" -eq "true"
@@ -78,6 +79,11 @@ jobs:
                 $dateDir = $Matches[1]
                 $key = "$dateDir/$fileName"
                 $protectedEntries[$key] = $jsonName
+                # 指针里的开机测试视频（boot-test 上传）也受保护
+                $videoPath = $jsonObj.sys.video
+                if ($videoPath) {
+                  $protectedEntries["$dateDir/$([IO.Path]::GetFileName(([Uri]$videoPath).AbsolutePath))"] = $jsonName
+                }
                 if ($jsonObj.sys.date) { $protectedDates.Add($jsonObj.sys.date) | Out-Null }
                 Write-Host "  [$jsonName] → $key" -ForegroundColor Gray
               }
