@@ -47,6 +47,10 @@ jobs:
             -e RCLONE_RC_USER=probe -e RCLONE_RC_PASS=probe123 \
             openlist-rclone:verify
           sleep 12
+          echo "── 容器状态 ──"
+          docker ps -a --filter name=verify --format '{{.Status}}'
+          echo "── 容器日志（死因）──"
+          docker logs verify 2>&1 | tail -n 30 || true
           echo "── 容器内进程 ──"
           docker exec verify sh -c "ps aux | grep -E 'openlist server|rclone rcd' | grep -v grep"
           docker exec verify sh -c "ps aux | grep -c '[o]penlist server'" | grep -q "[1-9]" && echo "OK openlist 在跑"
@@ -62,4 +66,4 @@ jobs:
 
       - name: 清理
         if: always()
-        run: docker rm -f verify 2>/dev/null || true
+        run: docker logs verify 2>&1 | tail -n 40 || true; docker rm -f verify 2>/dev/null || true
