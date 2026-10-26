@@ -1021,14 +1021,14 @@ Write-Host "镜像已重命名: $sysFileWithMd5.esd"
 Write-Host $jsonContent
 Write-Status -Step "生成文件校验和" -Status "完成"
 
-# Publish image
+# Publish image（用带 MD5 的文件名；latest 指针保持稳定名 $sysVer.json）
 Write-Status -Step "上传镜像到网盘" -Status "开始"
-.\bin\rclone.exe copy "$sysFile.esd" "$rclone_build_point/Nightly/$sysDate" --progress
+.\bin\rclone.exe copy "$sysFileWithMd5.esd" "$rclone_build_point/Nightly/$sysDate" --progress
 if ($?) { Write-Host "上传成功！" } else { Write-Error "上传失败！" }
-.\bin\rclone.exe copy "$sysFile.json" "$rclone_build_point/Nightly/$sysDate" --progress
+.\bin\rclone.exe copy "$sysFileWithMd5.json" "$rclone_build_point/Nightly/$sysDate" --progress
 # Set latest
 if ($Latest) {
-    .\bin\rclone.exe copyto "$sysFile.json" "$rclone_build_point/Nightly/$sysVer.json" --progress
+    .\bin\rclone.exe copyto "$sysFileWithMd5.json" "$rclone_build_point/Nightly/$sysVer.json" --progress
 }
 Write-Status -Step "上传镜像到网盘" -Status "完成"
 Write-Status -Step "全部完成" -Status "成功"
