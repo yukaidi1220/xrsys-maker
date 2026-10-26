@@ -20,7 +20,8 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # 轻量任务（curl/jq/git）跑 ubuntu-slim：1 vCPU 容器镜像，启动快占用低
+    runs-on: ubuntu-slim
     outputs:
       should_build: ${{ steps.detect.outputs.should_build }}
     steps:
@@ -134,20 +135,20 @@ jobs:
   boot-test:
     needs: build
     if: always() && needs.build.result != 'cancelled'
-    runs-on: windows-latest
+    # 纯触发器（gh workflow run），跑 ubuntu-slim：pwsh/gh 预装，无 Windows 依赖
+    runs-on: ubuntu-slim
     timeout-minutes: 60
     permissions:
       actions: write   # gh workflow run 触发 image-boot-test 必需
       contents: read
+    env:
+      TZ: Asia/Shanghai   # Linux 无 tzutil，用 TZ 环境变量取北京时间
     steps:
       - name: 扫描当日构建并逐个触发开机测试
         shell: pwsh
         env:
-          # 优先用内置 GITHUB_TOKEN（配了 permissions.actions:write 即可 dispatch）；
-          # RCLONE_TOKEN 是 rclone 用的 PAT，scope 未必含 actions:write
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tzutil /s "China Standard Time" 2>$null
           $today = (Get-Date).ToString('yyyy.MM.dd')
           "今日（北京）: $today"
           $base = "https://res.yukaidi.top/d/cr/qzy-hk/System/Nightly"
