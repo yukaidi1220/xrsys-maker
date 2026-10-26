@@ -350,7 +350,9 @@ jobs:
           }
           $argString +=
             "-drive `"if=pflash,format=raw,readonly=on,file=$edk2`" " +
-            "-display none -qmp tcp:127.0.0.1:4444,server,nowait"
+            # 显式 128MB 显存（默认 16MB）：QEMU 的 VGA 是纯软件模拟，不依赖宿主 GPU，
+            # 无显卡的 runner 也能跑。128MB 可覆盖 4K 双缓冲，给 Windows 更充裕的显示空间。
+            "-device VGA,vgamem_mb=128 -display none -qmp tcp:127.0.0.1:4444,server,nowait"
           if ("$env:IN_NIC" -ne "none") {
             $argString += " -netdev user,id=n0 -device $env:IN_NIC,netdev=n0"
           }
