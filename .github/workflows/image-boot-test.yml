@@ -7,10 +7,18 @@ name: 镜像开机测试
 on:
   workflow_dispatch:
     inputs:
+      use_latest:
+        description: "取当日最新指针（nightly 构建产物，按北京时间找当天目录）"
+        required: false
+        default: "true"
       esd_url:
-        description: "ESD 直链（res.yukaidi.top 的 302 链接即可，aria2c 会解析后下载）"
-        required: true
-        default: "https://res.yukaidi.top/d/cr/qzy-hk/System/Nightly/2026.07.22/EEEOS_Win11_26H1_Pro_x64_CN_Full_Net_2026.07.22_28000.2525.esd"
+        description: "ESD 直链（use_latest=false 时必填；res.yukaidi.top 的 302 链接即可）"
+        required: false
+        default: ""
+      esd_ver:
+        description: "最新指针名（如 EEEOS_Win11_26H1_Pro_x64_CN_Full_Net；use_latest=true 时用）"
+        required: false
+        default: "EEEOS_Win11_26H1_Pro_x64_CN_Full_Net"
       image_index:
         description: "镜像索引（1 起；nightly ESD 单映像自动回退 1，原版 ISO 的多版本母盘 4=专业版）"
         required: false
@@ -68,9 +76,8 @@ on:
         required: false
         default: "false"
   schedule:
-    # 每天抽查一次默认目标（UTC 04:40 = 北京 12:40，避开美东早高峰——17:40 UTC 档
-    # 实测整班被 GitHub 吞掉不触发）
-    - cron: "40 4 * * *"
+    # 每天抽查当日最新 nightly 构建（北京时间 04:30 = UTC 20:30，即构建 cron 00:00 后 4.5h）
+    - cron: "30 20 * * *"
 
 jobs:
   boot-test:
@@ -102,6 +109,39 @@ jobs:
           Copy-Item bin\wimlib\libwim-15.dll bin\ -Force
           .\bin\wimlib-imagex.exe --version
 
+      - name: 解析被测 ESD（当日最新指针）
+        id: resolve
+        shell: pwsh
+        run: |
+          # 全流程统一北京时间：runner 默认 UTC，先设时区
+          tzutil /s "China Standard Time" 2>$null
+          $cstNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date).ToUniversalTime(), 'China Standard Time')
+          "北京时间: $($cstNow.ToString('yyyy-MM-dd HH:mm:ss'))"
+          $useLatest = "${{ inputs.use_latest }}"
+          $url = "${{ inputs.esd_url }}"
+          if ($useLatest -eq "true") {
+            $ver = "${{ inputs.esd_ver }}"
+            $base = "https://res.yukaidi.top/d/cr/qzy-hk/System/Nightly"
+            # 指针文件（nightly 构建的 latest）→ 里面的 sys.url 就是当日 ESD 直链
+            $ptr = "$base/$ver.json"
+            try {
+              $obj = Invoke-RestMethod -Uri $ptr -TimeoutSec 60
+              $url = $obj.sys.url
+              $date = $obj.sys.date
+              "最新指针: $ptr"
+              "  版本: $($obj.sys.ver)  构建日期(北京): $date  大小: $($obj.sys.size)"
+              "  ESD: $url"
+              # 时效检查：指针日期距今超过 48h → 说明 nightly 构建没跑（或没更新指针），明确告警
+              $built = [datetime]::ParseExact($date, 'yyyy.MM.dd', $null)
+              $ageH = ($cstNow.Date - $built.Date).TotalHours
+              if ($ageH -gt 48) { "::warning::最新指针构建日期 $date 距今 $([int]$ageH) 小时——nightly 构建可能未产出新镜像，本次测试的是旧镜像" }
+              else { "指针新鲜度: 距今 $([int]$ageH) 小时（正常）" }
+            } catch { Write-Error "取最新指针失败（$ptr）：$($_.Exception.Message)" }
+          }
+          if (-not $url) { Write-Error "未取得 ESD 链接（use_latest=$useLatest 且 esd_url 为空）" }
+          "esd_url=$url" >> $env:GITHUB_OUTPUT
+          "esd_date=$(if ($date) { $date } else { 'unknown' })" >> $env:GITHUB_OUTPUT
+
       - name: 下载 ESD
         shell: pwsh
         run: |
@@ -112,7 +152,7 @@ jobs:
             Expand-Archive aria2.zip -DestinationPath temp-aria2 -Force
             Move-Item "temp-aria2\aria2-1.37.0-win-64bit-build1\aria2c.exe" .\bin\ -Force
           }
-          $esdUrl = "${{ inputs.esd_url }}"
+          $esdUrl = "${{ steps.resolve.outputs.esd_url }}"
           $finalUrl = $esdUrl
           try {
             $req = [System.Net.WebRequest]::Create($esdUrl)
