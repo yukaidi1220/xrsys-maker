@@ -987,20 +987,28 @@ $null = $sha256.TransformFinalBlock([byte[]]::new(0), 0, 0)
 $sysFileMD5 = [BitConverter]::ToString($md5.Hash).Replace('-', '').ToLower()
 $sysFileSHA256 = [BitConverter]::ToString($sha256.Hash).Replace('-', '').ToLower()
 $stream.Close(); $md5.Dispose(); $sha256.Dispose()
+
+# 文件名追加完整 32 位 MD5：同一天同版本多次构建时，驱动包/OSC 可能不同，
+# 内容不同 → MD5 不同 → 文件名天然唯一，不会互相覆盖，历史版本自动保留。
+# 测试视频沿用同一基名，仅扩展名不同（.esd / .mp4），一一对应不会错配。
+$sysFileWithMd5 = "${sysFile}_${sysFileMD5}"
+Rename-Item -Path ".\$sysFile.esd" -NewName "$sysFileWithMd5.esd" -Force
+Write-Host "镜像已重命名: $sysFileWithMd5.esd"
 @{
     "sys" = @{
         "ver"      = [string]$sysVer
         "vercn"    = $sysVerCN
         "date"     = $sysDate
         "datefull" = $sysDateFull
-        "file"     = "$sysFile.esd"
+        "file"     = "$sysFileWithMd5.esd"
         "size"     = "$sysFileSize GB"
         "byte"     = $sysFileByte
         "md5"      = $sysFileMD5
         "sha256"   = $sysFileSHA256
-        "url"      = "$Server/d/cr/qzy-hk/System/Nightly/$sysDate/$sysFile.esd"
-        # 开机测试视频（image-boot-test 绿局上传到同目录，供 EEEOS-GET 前端展示）
-        "video"    = "$Server/d/cr/qzy-hk/System/Nightly/$sysDate/$($sysFile)_测试视频.mp4"
+        "url"      = "$Server/d/cr/qzy-hk/System/Nightly/$sysDate/$sysFileWithMd5.esd"
+        # 开机测试视频：与镜像同基名（含 MD5），仅扩展名不同（.esd / .mp4），一一对应。
+        # 不用中文名，避免 URL 编码问题；不用"测试视频"字样。
+        "video"    = "$Server/d/cr/qzy-hk/System/Nightly/$sysDate/$sysFileWithMd5.mp4"
     }
     "os"  = @{
         "arch"    = $osArch
@@ -1009,7 +1017,7 @@ $stream.Close(); $md5.Dispose(); $sha256.Dispose()
         "file"    = $osFile
         "index"   = $osIndex
     }
-} | ConvertTo-Json -OutVariable jsonContent | Out-File -FilePath ".\$sysFile.json" -Encoding utf8
+} | ConvertTo-Json -OutVariable jsonContent | Out-File -FilePath ".\$sysFileWithMd5.json" -Encoding utf8
 Write-Host $jsonContent
 Write-Status -Step "生成文件校验和" -Status "完成"
 
