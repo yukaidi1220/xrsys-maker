@@ -299,9 +299,17 @@ jobs:
             $srcCand = @("V:\Windows\boot\EFI\bootmgfw.efi", "C:\Windows\Boot\EFI\bootmgfw.efi") |
               Where-Object { Test-Path $_ } | Select-Object -First 1
             if ($srcCand) {
-              New-Item -ItemType Directory $exDir -Force | Out-Null
-              Copy-Item $srcCand $exDst -Force
-              "EFI_EX 补位完成：$srcCand → $exDst"
+              try {
+                # -Force 递归建目录；个别情况下 New-Item 会因路径解析抛错，改用 .NET API 兜底
+                if (-not (Test-Path $exDir)) {
+                  try { New-Item -ItemType Directory -Path $exDir -Force -ErrorAction Stop | Out-Null }
+                  catch { [System.IO.Directory]::CreateDirectory($exDir) | Out-Null }
+                }
+                Copy-Item $srcCand $exDst -Force -ErrorAction Stop
+                "EFI_EX 补位完成：$srcCand → $exDst（$((Get-Item $exDst).Length) 字节）"
+              } catch {
+                "::warning::EFI_EX 补位失败（不中断，继续尝试 bcdboot）：$($_.Exception.Message)"
+              }
             } else { "::warning::EFI_EX 补位失败：找不到源 bootmgfw.efi" }
           }
           if ("$env:IN_BCD_BOOT" -eq "image") {
