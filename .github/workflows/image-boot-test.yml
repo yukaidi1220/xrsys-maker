@@ -287,11 +287,23 @@ jobs:
         run: |
           # 优先用宿主 bcdboot：镜像内 bcdboot（28000）在 26100 宿主上报 BFSVC 错误；
           # 宿主 bootmgr 向后兼容加载新 OS 的 winload 是标准做法
-          # 诊断标记：镜像里 bootmgfw_EX.efi 其实一直存在，bcdboot 报 0x3 是其内部
-          # GLOBALROOT 设备路径解析问题——60 次重试是从外部无解的固有噪音（约 1 分钟，
-          # 不影响引导，bootx64 回退路径一直正常）。此块仅探测留痕。
-          $exDst = "V:\Windows\boot\EFI_EX\bootmgfw_EX.efi"
-          if (Test-Path $exDst) { "补位跳过（$exDst 已存在，60 次重试为 bcdboot 固有噪音）" } else { "::warning::$exDst 不存在（罕见）" }
+          # EFI_EX 补位：宿主 bcdboot（26100）检测到 2023 PCA 证书时会走 BFSVC_USE_EX_BINS
+          # 分支，强制读取 V:\Windows\boot\EFI_EX\bootmgfw_EX.efi。老镜像（如 21H2）没有该
+          # 目录，bcdboot 直接失败（exit 193，实测 40440581684）。
+          # 对策：缺 EX 文件时用同版本标准文件复制一份补位，让 bcdboot 能通过校验。
+          $exDir = "V:\Windows\boot\EFI_EX"
+          $exDst = "$exDir\bootmgfw_EX.efi"
+          if (Test-Path $exDst) {
+            "补位跳过（$exDst 已存在）"
+          } else {
+            $srcCand = @("V:\Windows\boot\EFI\bootmgfw.efi", "C:\Windows\Boot\EFI\bootmgfw.efi") |
+              Where-Object { Test-Path $_ } | Select-Object -First 1
+            if ($srcCand) {
+              New-Item -ItemType Directory $exDir -Force | Out-Null
+              Copy-Item $srcCand $exDst -Force
+              "EFI_EX 补位完成：$srcCand → $exDst"
+            } else { "::warning::EFI_EX 补位失败：找不到源 bootmgfw.efi" }
+          }
           if ("$env:IN_BCD_BOOT" -eq "image") {
             # 镜像自带 bcdboot：保证引导文件与镜像同源（宿主版本会混入宿主 EFI 文件）
             $bcd = "V:\Windows\System32\bcdboot.exe"
