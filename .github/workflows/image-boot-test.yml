@@ -329,7 +329,43 @@ jobs:
           }
           "使用: $bcd"
           & $bcd V:\Windows /s Y: /f UEFI /v
-          if ($LASTEXITCODE -ne 0) { Write-Error "bcdboot 失败（exit $LASTEXITCODE）" }
+          if ($LASTEXITCODE -ne 0) {
+            "::warning::bcdboot 失败（exit $LASTEXITCODE），改用手工组装引导"
+            # 手工组装：不走 bcdboot，直接从镜像复制引导文件到 ESP，再用 bcdedit 建 BCD。
+            # 规避两条已知死路：宿主 26100 的 EX 分支（老镜像无 EFI_EX）+ 镜像自带 bcdboot
+            # 在宿主上 DLL 初始化失败（exit -1058471934）。
+            try {
+              New-Item -ItemType Directory "Y:\EFI\Boot" -Force -ErrorAction SilentlyContinue | Out-Null
+              New-Item -ItemType Directory "Y:\EFI\Microsoft\Boot" -Force -ErrorAction SilentlyContinue | Out-Null
+              # 引导管理器：优先镜像标准版，缺失则用宿主版（向后兼容加载新 OS 的 winload）
+              $bmSrc = @("V:\Windows\boot\EFI\bootmgfw.efi", "C:\Windows\Boot\EFI\bootmgfw.efi") |
+                Where-Object { Test-Path $_ } | Select-Object -First 1
+              if (-not $bmSrc) { throw "找不到 bootmgfw.efi 源文件" }
+              Copy-Item $bmSrc "Y:\EFI\Microsoft\Boot\bootmgfw.efi" -Force
+              Copy-Item $bmSrc "Y:\EFI\Boot\bootx64.efi" -Force
+              "手工组装：bootmgfw.efi ← $bmSrc（$((Get-Item $bmSrc).Length) 字节）"
+
+              # 用宿主 bcdedit 创建最小 BCD（指向 V: 上的 winload.efi）
+              $bcdStore = "Y:\EFI\Microsoft\Boot\BCD"
+              Remove-Item $bcdStore -Force -ErrorAction SilentlyContinue
+              & bcdedit /createstore $bcdStore | Out-Null
+              & bcdedit /store $bcdStore /create "{bootmgr}" /d "Windows Boot Manager" /device "partition=Y:" /application bootsector | Out-Null
+              & bcdedit /store $bcdStore /set "{bootmgr}" device "partition=Y:" | Out-Null
+              & bcdedit /store $bcdStore /set "{bootmgr}" path "\EFI\Microsoft\Boot\bootmgfw.efi" | Out-Null
+              & bcdedit /store $bcdStore /set "{bootmgr}" locale en-us | Out-Null
+              & bcdedit /store $bcdStore /create "{default}" /d "Windows 11" /application osloader | Out-Null
+              & bcdedit /store $bcdStore /set "{default}" device "partition=V:" | Out-Null
+              & bcdedit /store $bcdStore /set "{default}" path "\Windows\system32\winload.efi" | Out-Null
+              & bcdedit /store $bcdStore /set "{default}" systemroot "\Windows" | Out-Null
+              & bcdedit /store $bcdStore /set "{default}" osdevice "partition=V:" | Out-Null
+              & bcdedit /store $bcdStore /set "{bootmgr}" displayorder "{default}" | Out-Null
+              & bcdedit /store $bcdStore /set "{bootmgr}" timeout 30 | Out-Null
+              if ($LASTEXITCODE -ne 0) { throw "bcdedit 创建 BCD 失败（exit $LASTEXITCODE）" }
+              "手工组装：BCD 已创建"
+            } catch {
+              Write-Error "手工组装引导失败：$($_.Exception.Message)"
+            }
+          }
           if ("$env:IN_ESP_NATIVE" -eq "true") {
             # 宿主 bcdboot 会把宿主版引导文件缝进 ESP；用镜像原生 EX 版覆盖，引导链全程镜像同源
             foreach ($map in @(
