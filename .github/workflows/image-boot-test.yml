@@ -296,11 +296,17 @@ jobs:
           if (Test-Path $exDst) {
             "补位跳过（$exDst 已存在）"
           } else {
+            # wimlib 还原会保留镜像内 ACL：V:\Windows\boot 归 SYSTEM/TrustedInstaller 所有，
+            # 当前进程写不进去（实测 Access denied）。只授权 boot 目录本身（不递归，避免
+            # 数千文件遍历拖慢），够用来新建 EFI_EX 子目录。
+            try {
+              & icacls "V:\Windows\boot" /grant "${env:USERNAME}:(OI)(CI)F" /C 2>&1 | Select-Object -Last 1
+            } catch { "::warning::icacls 授权失败：$($_.Exception.Message)" }
+
             $srcCand = @("V:\Windows\boot\EFI\bootmgfw.efi", "C:\Windows\Boot\EFI\bootmgfw.efi") |
               Where-Object { Test-Path $_ } | Select-Object -First 1
             if ($srcCand) {
               try {
-                # -Force 递归建目录；个别情况下 New-Item 会因路径解析抛错，改用 .NET API 兜底
                 if (-not (Test-Path $exDir)) {
                   try { New-Item -ItemType Directory -Path $exDir -Force -ErrorAction Stop | Out-Null }
                   catch { [System.IO.Directory]::CreateDirectory($exDir) | Out-Null }
