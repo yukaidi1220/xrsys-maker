@@ -112,14 +112,55 @@ jobs:
       - name: 安装 QEMU 与 wimlib
         shell: pwsh
         run: |
-          choco install qemu -y --no-progress
-          $qemu = Get-ChildItem "C:\Program Files\qemu" -Filter qemu-system-x86_64.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $qemu) { $qemu = Get-ChildItem "C:\ProgramData\chocolatey\lib" -Filter qemu-system-x86_64.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName }
-          if (-not $qemu) { Write-Error "找不到 qemu-system-x86_64.exe" }
+          # QEMU 安装：16 局并发时 choco 源限流常失败（实测 2/16 挂在此处）。
+          # 策略：choco 重试 3 次 → 仍失败则直接下载官方安装包离线安装 → 再找不到才报错。
+          function Find-Qemu {
+            $p = Get-ChildItem "C:\Program Files\qemu" -Filter qemu-system-x86_64.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+            if (-not $p) { $p = Get-ChildItem "C:\ProgramData\chocolatey\lib" -Filter qemu-system-x86_64.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName }
+            return $p
+          }
+
+          $qemu = $null
+          for ($try = 1; $try -le 3; $try++) {
+            "── choco 安装 QEMU（第 $try 次）──"
+            choco install qemu -y --no-progress 2>&1 | Select-Object -Last 5
+            $qemu = Find-Qemu
+            if ($qemu) { "choco 安装成功"; break }
+            "choco 第 $try 次失败，$([int](15 * $try)) 秒后重试"
+            Start-Sleep -Seconds (15 * $try)
+          }
+
+          if (-not $qemu) {
+            # 兜底：官方安装包直连（不经 choco 源），静默安装
+            "::warning::choco 三次均失败，改用官方安装包离线安装"
+            $msi = "qemu-setup.exe"
+            foreach ($url in @(
+              "https://qemu.weilnetz.de/w64/2025/qemu-w64-setup-20250422.exe",
+              "https://qemu.weilnetz.de/w64/qemu-w64-setup-latest.exe"
+            )) {
+              try {
+                "下载 $url"
+                Invoke-WebRequest -Uri $url -OutFile $msi -TimeoutSec 300 -ErrorAction Stop
+                Start-Process $msi -ArgumentList "/S" -Wait -ErrorAction Stop
+                $qemu = Find-Qemu
+                if ($qemu) { "离线安装成功"; break }
+              } catch { "该源失败：$($_.Exception.Message)" }
+            }
+          }
+
+          if (-not $qemu) { Write-Error "QEMU 安装彻底失败（choco 3 次 + 2 个离线源均不可用）" }
           "QEMU: $qemu"
           Add-Content $env:GITHUB_PATH (Split-Path $qemu)
           & $qemu --version
-          Invoke-WebRequest -Uri "https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/wimlib-1.14.4-windows-x86_64-bin.zip" -OutFile wimlib.zip
+          # 工具包下载同样加重试（16 局并发时 GitHub Releases 偶发 5xx/限流）
+          $toolOk = $false
+          for ($t = 1; $t -le 3; $t++) {
+            try {
+              Invoke-WebRequest -Uri "https://github.com/yukaidi1220/xrsys-maker/releases/download/Tool_Resource/wimlib-1.14.4-windows-x86_64-bin.zip" -OutFile wimlib.zip -TimeoutSec 180 -ErrorAction Stop
+              $toolOk = $true; break
+            } catch { "wimlib 下载第 $t 次失败：$($_.Exception.Message)"; Start-Sleep -Seconds (10 * $t) }
+          }
+          if (-not $toolOk) { Write-Error "wimlib 下载失败（3 次重试）" }
           Expand-Archive wimlib.zip -DestinationPath bin\wimlib -Force
           # 该 zip 无顶层目录，直接平铺拷出两个需要的文件
           Copy-Item bin\wimlib\wimlib-imagex.exe bin\ -Force
