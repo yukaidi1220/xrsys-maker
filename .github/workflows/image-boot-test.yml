@@ -656,9 +656,35 @@ jobs:
         run: |
           # 仅绿局：去重保留的截图转 H.265 MP4（5fps、低码率、慢preset高压缩）。
           # 只取 1280x800 帧——小分辨率是机器未起来时的早期截图，全部丢弃。
-          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-            choco install ffmpeg -y --no-progress | Out-Null
+          #
+          # ffmpeg 安装与 QEMU 同策略：choco 重试 3 次 → 静态构建包离线兜底。
+          # （16 局并发时 choco 源限流，实测有 2/16 挂在这一步）
+          $ffmpegOk = [bool](Get-Command ffmpeg -ErrorAction SilentlyContinue)
+          if (-not $ffmpegOk) {
+            for ($try = 1; $try -le 3; $try++) {
+              "── choco 安装 ffmpeg（第 $try 次）──"
+              choco install ffmpeg -y --no-progress 2>&1 | Select-Object -Last 3
+              if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { $ffmpegOk = $true; break }
+              "choco 第 $try 次失败，$([int](10 * $try)) 秒后重试"
+              Start-Sleep -Seconds (10 * $try)
+            }
           }
+          if (-not $ffmpegOk) {
+            # 兜底：gyan.dev 官方静态构建（含 ffmpeg.exe / ffprobe.exe，无需安装）
+            "::warning::choco 三次均失败，改用静态构建包"
+            try {
+              Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg.zip -TimeoutSec 300 -ErrorAction Stop
+              Expand-Archive ffmpeg.zip -DestinationPath bin\ffmpeg -Force
+              $exe = Get-ChildItem "bin\ffmpeg" -Filter ffmpeg.exe -Recurse | Select-Object -First 1 -ExpandProperty FullName
+              if ($exe) {
+                Add-Content $env:GITHUB_PATH (Split-Path $exe)
+                $env:Path = "$(Split-Path $exe);$env:Path"
+                $ffmpegOk = $true
+                "静态构建包就绪：$exe"
+              }
+            } catch { "::warning::静态构建包下载失败：$($_.Exception.Message)" }
+          }
+          if (-not $ffmpegOk) { "::warning::ffmpeg 不可用，跳过视频生成（判定不受影响）"; exit 0 }
           "ffmpeg: $((ffmpeg -version 2>$null | Select-Object -First 1))"
           function Get-PpmSize([string]$path) {
             $fs = [IO.File]::OpenRead($path)
@@ -694,12 +720,19 @@ jobs:
           $sw = [System.Diagnostics.Stopwatch]::StartNew()
           ffmpeg -y -hide_banner -loglevel error -f concat -safe 0 -i $listFile `
             -r 5 -c:v libx265 -preset slow -crf 30 -pix_fmt yuv420p -tag:v hvc1 $videoName
-          if ($LASTEXITCODE -ne 0) { "::warning::ffmpeg 编码失败（exit $LASTEXITCODE），不影响判定" }
-          elseif (Test-Path $videoName) {
+          $encExit = $LASTEXITCODE
+          if ($encExit -ne 0) {
+            "::warning::ffmpeg 编码失败（exit $encExit），不影响判定"
+          } elseif (Test-Path $videoName) {
             $dur = & ffprobe -v error -show_entries format=duration -of csv=p=0 $videoName 2>$null
             "$videoName 生成：$([math]::Round((Get-Item $videoName).Length/1MB,2))MB，ffprobe 实测时长 ${dur}s（期望 ~$([math]::Round($used/5,1))s），耗时 $([int]$sw.Elapsed.TotalSeconds)s"
             "video_name=$videoName" >> $env:GITHUB_OUTPUT
           }
+          # 关键：GitHub Actions 会在脚本末尾追加 `exit $LASTEXITCODE`，上面 ffmpeg
+          # 失败的非零退出码会让整个步骤变红（判定通过却红，实测 40600833508/40600859950）。
+          # 视频只是附属产物，失败不该影响判定结果，这里显式清零。
+          $global:LASTEXITCODE = 0
+          exit 0
 
       - name: 获取 rclone 配置与二进制（私有仓）
         if: success()
