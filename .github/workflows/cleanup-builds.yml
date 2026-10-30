@@ -2,8 +2,10 @@ name: 清理历史构建版本
 
 on:
   schedule:
-    # 每周日北京时间 09:10（UTC 周日 01:10），对齐 MSUpdate
-    - cron: "10 1 * * 0"
+    # 每天北京时间 08:00（UTC 00:00），在 nightly 构建窗口之后运行。
+    # 2026-10-30 起改为每天：1TB 盘实测每天新增约 135GB（16 通道 × ~8.4GB），
+    # 每周清一次意味着两次清理之间最多堆 945GB，无论保留几个版本都会爆盘。
+    - cron: "0 0 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -12,9 +14,9 @@ on:
         default: true
         type: boolean
       keep_days:
-        description: "保留天数（默认 30）"
+        description: "保留天数（默认 2，即今天 + 前 2 天，共 3 个日期目录）"
         required: false
-        default: "30"
+        default: "2"
         type: string
       keep_recent:
         description: "保留最近 N 个日期目录（默认 3）"
@@ -46,7 +48,7 @@ jobs:
         run: |
           # 主存储已于 2026-10 切到 Cloudreve（zhipin 退役），remote 同步更正
           $remoteBase  = "cloudreve:/File/System/Nightly"
-          $keepDays    = [int]"${{ inputs.keep_days || '30' }}"
+          $keepDays    = [int]"${{ inputs.keep_days || '2' }}"
           $keepRecent  = [int]"${{ inputs.keep_recent || '3' }}"
           # 显式区分触发源，不依赖 schedule 下 inputs 为空串的隐式语义：
           # 定时=真删（正常运维），手动=默认空跑（防误操作，需显式传 dry_run=false）
