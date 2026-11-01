@@ -36,7 +36,7 @@ jobs:
           # jq 缺失则尝试安装；安装失败也绝不中断（后续解析会安全降级为 ERR）
           command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq >/dev/null 2>&1 || echo "  [警告] jq 安装失败，将尝试继续"
           BASE="https://res.yukaidi.top/d/gslb/mupan/System_MSUpdate"
-          TARGETS="11/26H1 11/25H2 11/24H2 11/23H2 11/21H2 10/22H2 11/LTSC2024 10/LTSC2021 10/LTSC2019"
+          TARGETS="11/26H1 11/25H2 11/26H2 11/24H2 11/23H2 11/21H2 10/22H2 11/LTSC2024 10/LTSC2021 10/LTSC2019"
           SIG=""
           for t in $TARGETS; do
             tmpf=$(mktemp); codef=$(mktemp)
@@ -92,6 +92,7 @@ jobs:
         target:
           - w1126h164
           - w1125h264
+          - w1126h264
           - w1124h264
           - w1123h264
           - w1121h264
@@ -152,10 +153,14 @@ jobs:
           $today = (Get-Date).ToString('yyyy.MM.dd')
           "今日（北京）: $today"
           $base = "https://res.yukaidi.top/d/cr/qzy-hk/System/Nightly"
-          # 全部 latest 指针（8 版本 × 精简/完整驱动 = 16 个）
+          # 全部 latest 指针（9 版本 × 精简/完整驱动 = 18 个）
+          # ⚠️ 新增通道必须同步在这里加指针：本任务不是自动扫描，是按这份名单逐个
+          # 触发——漏了的话该通道永远不会跑开机测试、永远没有视频（2026-10-30
+          # 26H2 接入时审查抓到的漏项，26H1 当年也是单独一个提交补的这里）
           $pointers = @(
             'EEEOS_Win11_26H1_Pro_x64_CN_Full_Net',   'EEEOS_Win11_26H1_Pro_x64_CN_Full_DrvCeo',
             'EEEOS_Win11_25H2_Pro_x64_CN_Full_Net',   'EEEOS_Win11_25H2_Pro_x64_CN_Full_DrvCeo',
+            'EEEOS_Win11_26H2_Pro_x64_CN_Full_Net',   'EEEOS_Win11_26H2_Pro_x64_CN_Full_DrvCeo',
             'EEEOS_Win11_24H2_Pro_x64_CN_Full_Net',   'EEEOS_Win11_24H2_Pro_x64_CN_Full_DrvCeo',
             'EEEOS_Win11_23H2_Pro_x64_CN_Full_Net',   'EEEOS_Win11_23H2_Pro_x64_CN_Full_DrvCeo',
             'EEEOS_Win11_LTSC2024_EntS_x64_CN_Full_Net', 'EEEOS_Win11_LTSC2024_EntS_x64_CN_Full_DrvCeo',

@@ -396,6 +396,18 @@ switch ($Target) {
         $sysVer = "EEEOS_Win11_25H2_Pro_x64_CN_Full"
         $sysVerCN = "鹅鹅鹅系统_Win11_25H2_专业_x64_完整"
     }
+    "w1126h264" {
+        $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/26H2/latest_x64.json"
+        $osUrl = "$MSUpdate_URL/11/26H2/" + $obj.os_version + '/' + $obj.name
+        $osMd5 = $obj.hash.md5
+        $osFile = $obj.name
+        $osIndex = 4
+        $osVer = $obj.os_ver
+        $osVersion = $obj.os_version
+        $osArch = $obj.os_arch
+        $sysVer = "EEEOS_Win11_26H2_Pro_x64_CN_Full"
+        $sysVerCN = "鹅鹅鹅系统_Win11_26H2_专业_x64_完整"
+    }
     "w1123h2a64" {
         $obj = Invoke-RestMethod -Uri "$MSUpdate_URL/11/23H2/latest_arm64.json"
         $osUrl = "$MSUpdate_URL/11/23H2/" + $obj.os_version + '/' + $obj.name
