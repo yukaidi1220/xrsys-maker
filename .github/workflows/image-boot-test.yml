@@ -610,7 +610,18 @@ jobs:
                   $mainSame = 0; $bandTickInStable = $false; $periodLen = 1
                 }
                 $lastMain = $main; $lastBand = $band
-                if ($mainSame -ge 10 -and $bandTickInStable) { $verdict = "desktop"; break }
+                if ($mainSame -ge 10 -and $bandTickInStable) {
+                  # 第 1 次开机里出现的"到桌面"形态是部署流程的 OOBE 静态窗口：
+                  # 机器名/密码/UAC 对话框各 15 秒自动应答，画面静止但时钟在走。
+                  # 修改版部署固定以重启收尾，真桌面在第 2 轮。若在首轮就收工，
+                  # 视频会停在第一次重启处，"进桌面后的任务"（装软件/OSC 优化）
+                  # 整段缺席——26H2 Net 2026-11-01 实测（判定 8 分 13 秒提前收工，
+                  # 视频停在重启画面），故只在第 2 轮起接受该判定。
+                  if ($bootRound -ge 2) { $verdict = "desktop"; break }
+                  if ($mainSame -eq 10) {
+                    "  第 1 次开机出现桌面形态：部署阶段 OOBE 静态窗口，继续观察至部署收尾（重启后进入真桌面）"
+                  }
+                }
                 if ($mainSame -ge 100 -and -not $bandTickInStable) { $verdict = "frozen"; break }
               } else {
                 Remove-Item $shot -Force -ErrorAction SilentlyContinue
