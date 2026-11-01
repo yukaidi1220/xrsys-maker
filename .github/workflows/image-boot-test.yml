@@ -473,7 +473,7 @@ jobs:
           $periodLen = 0
           $i = 0; $kept = 0; $verdict = "timeout"
           $lastMain = $null; $lastBand = $null; $mainSame = 0; $bandTickInStable = $false
-          $desktopRound = 0
+          $desktopConfirmedAt = $null
           $maxRounds = [int]"$env:IN_BOOT_ROUNDS"
           for ($bootRound = 1; $bootRound -le $maxRounds -and $verdict -eq "timeout"; $bootRound++) {
             # 每轮重置判定状态：跨重启不重置会让 loop 计数累加（不同轮次的同画面误判 loop）、
@@ -614,20 +614,28 @@ jobs:
                 if ($mainSame -ge 10 -and $bandTickInStable) {
                   if ($verdict -ne "desktop") {
                     if ($bootRound -ge 2) {
-                      # 第 2 轮起 = 真桌面。只记账、不收工：桌面环境的任务（装软件/
-                      # OSC 优化/电源偏好）此刻正在跑，画面持续变化；部署收尾以
-                      # "系统部署完成，重启后生效"的最后一次重启结束。记账后若
-                      # 客户机又重启（= 收尾重启已发生），在收尾后桌面上稳定
-                      # 3 分钟即收工——否则干净桌面永久静止、判定永远满足，
-                      # 会白白跑满 run_minutes（26H2 Net 2026-10-31 实测浪费 80 分钟）。
+                      # 第 2 轮起 = 真桌面（部署 + OOBE 在第 1 轮，OOBE 生效重启在
+                      # 第 2 轮）。记账后继续观察：桌面环境的任务（装软件/OSC 优化/
+                      # 电源偏好）此刻正在跑，画面持续变化，判定不会满足；收尾以
+                      # "系统部署完成，重启后生效"的最后一次重启结束。
+                      #
+                      # 实测（26H2 Net 2026-10-31/11-01，两局）：
+                      #   - 判定首次满足的时机天然落在"收尾重启后的干净桌面"上
+                      #     （任务运行期间画面在变，静止 30 秒凑不出来）；
+                      #   - 记账后无出口的版本会白白跑满 run_minutes（浪费 80 分钟）；
+                      #   - 干净桌面永久静止，靠"记账后又重启"的断点永远够不着。
+                      # 所以用固定观察窗：真桌面确认后再看 10 分钟即收——任务链
+                      # 实测在进桌面后 10~15 分钟内完成，10 分钟余量够；挂死场景
+                      # 由该窗口与 run_minutes 双重兜底。
                       $verdict = "desktop"
-                      $desktopRound = $bootRound
-                      "  第 $bootRound 次开机确认进入真桌面——继续观察桌面任务至部署收尾（收尾重启后稳定 3 分钟即收）"
+                      $desktopConfirmedAt = Get-Date
+                      "  第 $bootRound 次开机确认进入真桌面——继续观察 10 分钟桌面任务至部署收尾"
                     } elseif ($mainSame -eq 10) {
                       "  第 1 次开机出现桌面形态：部署阶段 OOBE 静态窗口，继续观察至部署收尾（重启后进入真桌面）"
                     }
-                  } elseif ($bootRound -gt $desktopRound -and $mainSame -ge 60) {
-                    "  第 $bootRound 次开机为部署收尾后的干净桌面（已稳定 3 分钟）——任务链已在视频中，收工"
+                  } elseif ($desktopConfirmedAt -and
+                            ((Get-Date) - $desktopConfirmedAt).TotalMinutes -ge 10) {
+                    "  真桌面后已观察 10 分钟——桌面任务链已收尾（部署完成的重启已发生），收工"
                     break
                   }
                 }
